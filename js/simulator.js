@@ -13,17 +13,31 @@ var pvpMaps = [
 	{ name: '기주, 초원 전투', tiles: [4200001, 4200002], weather: [ 68, 16, 16, 0, 0 ] }, // grassland
 	{ name: '옹주, 사막 전투', tiles: [4200004, 4200032], weather: [ 68, 16, 16, 0, 0 ] }, // desert
 	{ name: '사주, 도성 전투', tiles: [4200017, 4200024], weather: [ 20, 50, 30, 0, 0 ] }, // castle
-	{ name: '양주, 장강 전투', tiles: [4200014, 4200011], weather: [ 24, 36, 24, 16, 0 ] },  // river
+	{ name: '양주, 장강 전투', tiles: [4200014, 4200011], weather: [ 24, 36, 24, 16, 0 ] }, // river
 ];
 var brawlMaps = [
 	{ name: '난투', tiles: [4200060], weather: [ 20, 20, 20, 20, 20 ] } // Brawl
 ];
+var mmTileIds = Object.keys(tiles).map(Number).filter( function(tid) {
+	// 34-39: toxic pool, 41: crossroads, 44,47,51: forest (xxx), 48,49: grassland (xxx)
+	return tid !== 4200034 && (tid < 4200037 || tid > 4200061);
+});
+var mengMeiMaps = [
+	{ name: 'Any', tiles: mmTileIds, weather: [ 20, 20, 20, 20, 20 ] } // Allow all weather
+];
+var fourGodMaps = [
+	{ name: '청룡', tiles: [4200053, 4200009], weather: [ 0, 50, 0, 20, 30 ] }, // dragon
+	// TODO: tile in bird raid has no flame tiles
+	//{ name: '주작', tiles: [4200058, 4200059], weather: [ 70, 30, 0, 0, 0 ] }, // bird
+];
 
 var gameModes = [ // assume all unit lv is 99
-	{ name: '경쟁전', suffix: '', maps: pvpMaps, hpMul: 1.5, hasFormation: true, p0bonus: 0, p1bonus: 0 },  // pvp
-	{ name: '난투',  suffix: '', maps: brawlMaps, hpMul: 2, hasFormation: false, p0bonus: 0, p1bonus: 0 },
-	{ name: '섬멸전', suffix: ' - Player first', maps: pvpMaps, hpMul: 1.5, hasFormation: true, p0bonus: 0, p1bonus: 10 },
-	{ name: '섬멸전', suffix: ' - AI first',     maps: pvpMaps, hpMul: 1.5, hasFormation: true, p0bonus: 3, p1bonus: 7 },
+	{ name: '경쟁전', suffix: '', maps: pvpMaps, hpMul: 1.5, hasFormation: true, p0bonus: 0, p1bonus: 0, gfe: 50, pRawDmg: 5000 },  // pvp
+	{ name: '난투',  suffix: '', maps: brawlMaps, hpMul: 2, hasFormation: false, p0bonus: 0, p1bonus: 0, gfe: 50, pRawDmg: 5000 },
+	{ name: '섬멸전', suffix: ' - Player first', maps: pvpMaps, hpMul: 1.5, hasFormation: true, p0bonus: 0, p1bonus: 10, gfe: 50, pRawDmg: 5000 },
+	{ name: '섬멸전', suffix: ' - AI first',     maps: pvpMaps, hpMul: 1.5, hasFormation: true, p0bonus: 3, p1bonus: 7, gfe: 50, pRawDmg: 5000 },
+	{ name: '몽매의 시련', suffix: '', maps: mengMeiMaps, hpMul: 2, hasFormation: false, p0bonus: 0, p1bonus: 0, gfe: 50, pRawDmg: 5000 },
+	//{ name: '사신전', suffix: '', maps: fourGodMaps, hpMul: 1, hasFormation: false, p0bonus: 0, p1bonus: 0, gfe: 100, pRawDmg: 2500 },
 ];
 var gameModeId = 0;
 var gameMode = gameModes[gameModeId];
@@ -91,8 +105,28 @@ function findItemEnhance(itemTier, eType, lv) {
 	return null;
 }
 
+function findArtifactEnhanceGroup(artifact) {
+	if (artifact['enhanceType'] <= 2) {
+		// melee: 1, range: 2
+		return 1;
+	}
+	else if (artifact['enhanceType'] === 3) {
+		// fan except jade fan
+		return 3;
+	}
+	else if (artifact['enhanceType'] === 4) {
+		return 4;
+	}
+	else if (artifact['enhanceType'] <= 7) {
+		return 5; // armor/robe/dress
+	}
+	//return artifact['enhanceType'];
+	return 8; // acc
+}
+
+// find main enhance type for upgrade stat
 function _findArtifactEnhanceType(artifact) {
-	if (artifact['itemType'] <= 6) {
+	/*if (artifact['itemType'] <= 6) {
 		// physical weapon (type: 1,2,3,4,5,6)
 		return [1];
 	}
@@ -105,10 +139,37 @@ function _findArtifactEnhanceType(artifact) {
 	else if (artifact['itemType'] <= 11) {
 		return [5]; // armor/robe/dress
 	}
+	return [8]; // acc*/
+	return findArtifactPassive12Group(artifact)[0];
+}
+
+// find +12 passive groups
+function findArtifactPassive12Group(artifact) {
+	if (artifact['enhanceType'] <= 2) {
+		// melee: 1, range: 2
+		// physical weapon (type: 1,2,3,4,5,6)
+		return [1];
+	}
+	else if (artifact['enhanceType'] === 3) {
+		// fan except jade fan
+		return [3];
+	}
+	else if (artifact['enhanceType'] === 4) {
+		return [3,1];
+	}
+	else if (artifact['enhanceType'] <= 7) {
+		return [5]; // armor/robe/dress
+	}
 	return [8]; // acc
 }
 
 function _findRelicSet(relics) {
+	// must no empty relic slot
+	for (var i = 0; i < relics.length; i++) {
+		if (relics[i] === null)
+			return null;
+	}
+	
 	var rtype = relics[0]['type'];
 	var tier = relics[0]['tier'];
 	var hash = rtype << 7;
@@ -150,9 +211,10 @@ function _findObj(objId, objArr) {
 // for mapping key name to id. so always append to the array to reserve a old serialized data
 var serializeKeyNames = [
 	'id', 'weapon', 'armor', 'kit', 'passives', 'relics', 'scroll', 'formation', 'hp',
-	'battlePassives', 'conditions', 'terrain', 'tactic', 'gid', 'mid', 'wid', 'p0', 'p1'
+	'battlePassives', 'conditions', 'terrain', 'tactic', 'gid', 'mid', 'wid', 'p0', 'p1',
+	'extraPassives', 'customStat', 'relation', 'disableResearch'
 ];
-var serializeKeyArray = ['battlePassives', 'conditions']; // data array that size can be any length
+var serializeKeyArray = ['battlePassives', 'conditions', 'extraPassives']; // data array that size can be any length
 function _userUnit2SerializeObj(uinfo, doFull=false) {
 	var outObj = {
 		'id': uinfo.unit['id'] - 1100000,
@@ -165,22 +227,52 @@ function _userUnit2SerializeObj(uinfo, doFull=false) {
 		'formation': [ uinfo.formationId, uinfo.formationPos ],
 	};
 	for (var i = 0; i < 4; i++) {
-		outObj.relics[i*3] = _findObjId(uinfo.relics[i], relics) - 13000000;
-		outObj.relics[i*3+1] = _findObjId(uinfo.relicPassives[i], relicPassives) - 13010000;
+		outObj.relics[i*3] = uinfo.relics[i] ? (_findObjId(uinfo.relics[i], relics) - 13000000) : 0;
+		outObj.relics[i*3+1] = uinfo.relicPassives[i] ? (_findObjId(uinfo.relicPassives[i], relicPassives) - 13010000) : 0;
 		outObj.relics[i*3+2] = uinfo.relicPassivesLv[i];
 	}
+	var relation = [];
+	for (var rid in uinfo.activeRelation) {
+		relation.push(rid-1220000);
+		var val = 0;
+		var relationPassiveIdxs = uinfo.activeRelation[rid];
+		for (var i = 0; i < relationPassiveIdxs.length; i++) {
+			var idx = relationPassiveIdxs[i];
+			val |= (1 << idx);
+		}
+		relation.push(val);
+	}
+	if (relation.length > 0)
+		outObj.relation = relation;
+	
+	if (uinfo.disableResearch)
+		outObj.disableResearch = 1;
+	if (uinfo.overriddenStat !== null) {
+		var os = uinfo.overriddenStat;
+		outObj.customStat = [ os['str'], os['int'], os['cmd'], os['dex'], os['lck'],
+			os['atk'], os['wis'], os['def'], os['agi'], os['mrl'] ];
+	}
+	var extraPassives = [];
+	for (var passiveId in uinfo.extraPassives) {
+		extraPassives.push(passiveId - 2200000);
+		extraPassives.push(uinfo.extraPassives[passiveId]);
+	}
+	if (extraPassives.length > 0)
+		outObj.extraPassives = extraPassives;
+	
 	if (doFull) {
 		// hp/mp
-		outObj.hp = [ uinfo.hp, uinfo.mp];
+		outObj.hp = [ uinfo.hp, uinfo.mp ];
 		// battle passive
-		var bp = {}
+		var bp = [];
 		for (var i = 0; i < uinfo.battlePassives.length; i++) {
 			var battlePassive = uinfo.battlePassives[i];
 			if (battlePassive.type === 0)
 				continue; // auto active (no need to serialize)
 			if (battlePassive.defaultVal === battlePassive.userVal)
 				continue;
-			bp[battlePassive.id-2200000] = battlePassive.userVal;
+			bp.push(battlePassive.id - 2200000);
+			bp.push(battlePassive.userVal);
 		}
 		if (bp.length > 0)
 			outObj.battlePassives = bp;
@@ -207,12 +299,15 @@ function _userUnit2SerializeObj(uinfo, doFull=false) {
 function _artifact2SerializedObj(equipInfo) {
 	var p6 = equipInfo['p6'] ? _findObjId(equipInfo['p6'], itemEnhancePassives) : 0;
 	var p12 = equipInfo['p12'] ? _findObjId(equipInfo['p12'], itemEnhancePassives) : 0;
-	return [ equipInfo['item']['id']-3000000, equipInfo['lv'], p6 ? p6 - 2700000 : 0, p12 ? p12 - 2700000 : 0 ];
+	var out = [ equipInfo['item']['id']-3000000, equipInfo['lv'], p6 ? p6 - 2700000 : 0, p12 ? p12 - 2700000 : 0 ];
+	if ('pc' in equipInfo)
+		out.push(_findObjId(equipInfo['pc'], craftPassives[findArtifactEnhanceGroup(equipInfo['item'])]) - 2710000);
+	return out;
 }
 
 //var keyStrBase64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 var keyStrUriSafe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$";
-var txtChars = '1234567890:.,{}'; // 15 chars
+var txtChars = '1234567890:.,{}-'; // 16 chars (- is for ending for message too)
 function _compressSerializedTxt(txt) {
 	var out = '';
 	var nBit = 0;
@@ -261,11 +356,8 @@ function _decompressSerializedTxt(txt) {
 		else { // nBit === 2
 			out += txtChars[(n<<2) | (idx>>4)];
 			var tmp = idx&15;
-			if (tmp === 15) {
-				if (i !== txt.length - 1)
-					return null;
+			if (tmp === 15 && i === txt.length - 1)
 				break;
-			}
 			out += txtChars[tmp];
 			nBit = 0;
 		}
@@ -376,16 +468,21 @@ function serializeUserUnit(uinfo, doFull=false) {
 
 function _unserializeArtifact(info) {
 	var item = _findObj(info[0]+3000000, artifacts);
-	return {
+	var out =  {
 		'item': item,
 		'lv': info[1],
 		'p6': info[2] ? itemEnhancePassives[info[2] + 2700000] : null,
 		'p12': info[3] ? itemEnhancePassives[info[3] + 2700000] : null,
-		'enhance': findItemEnhance(item.tier, _findArtifactEnhanceType(item)[0], info[1])
+		'enhance': findItemEnhance(item.tier, _findArtifactEnhanceType(item), info[1])
 	};
+	if (info.length > 4)
+		out['pc'] = craftPassives[findArtifactEnhanceGroup(item)][info[4] + 2710000]
+	else if (isItemCraftable(item))
+		out['pc'] = _getDefaultCraftWeaponPassive(item);;
+	return out;
 }
 
-function _serializedObj2UserUnit(sobj, uid) {
+function _serializedObj2UserUnit(sobj, uid, fromPreset) {
 	var unit = _findObj(sobj.id + 1100000, units);	
 	var uinfo  = getDefaultUnitInfo(unit, uid);
 	uinfo.weapon = _unserializeArtifact(sobj.weapon);
@@ -394,23 +491,55 @@ function _serializedObj2UserUnit(sobj, uid) {
 	uinfo.selectedPassiveLists = sobj.passives;
 	uinfo.scrolls = { 'str': sobj.scroll[0], 'int': sobj.scroll[1], 'cmd': sobj.scroll[2], 'dex': sobj.scroll[3], 'lck': sobj.scroll[4] };
 	for (var i = 0; i < 4; i++) {
-		uinfo.relics[i] = relics[sobj.relics[i*3] + 13000000];
-		uinfo.relicPassives[i] = relicPassives[sobj.relics[i*3+1] + 13010000];
+		uinfo.relics[i] = sobj.relics[i*3] ? (relics[sobj.relics[i*3] + 13000000]) : null;
+		uinfo.relicPassives[i] = sobj.relics[i*3+1] ? (relicPassives[sobj.relics[i*3+1] + 13010000]) : null;
 		uinfo.relicPassivesLv[i] = sobj.relics[i*3+2];
 	}
 	uinfo.relicSet = _findRelicSet(uinfo.relics);
+	// if from preset unit data, don't overwrite active relation. so new relation can be activated automatically
+	if (!fromPreset) {
+		uinfo.activeRelation = {};
+		if ('relation' in sobj) {
+			for (var i = 0; i < sobj.relation.length; i+=2) {
+				var val = sobj.relation[i+1];
+				var arr = [];
+				for (var j = 0; val !== 0; j++) {
+					if (val & 1)
+						arr.push(j);
+					val >>= 1;
+				}
+				uinfo.activeRelation[sobj.relation[i]+1220000] = arr;
+			}
+		}
+	}
+	if ('disableResearch' in sobj)
+		uinfo.disableResearch = true;
+	if ('customStat' in sobj) {
+		uinfo.overriddenStat = {
+			'str': sobj.customStat[0], 'int': sobj.customStat[1], 'cmd': sobj.customStat[2], 'dex': sobj.customStat[3], 'lck': sobj.customStat[4],
+			'atk': sobj.customStat[5], 'wis': sobj.customStat[6], 'def': sobj.customStat[7], 'agi': sobj.customStat[8], 'mrl': sobj.customStat[9]
+		};
+	}
+	if ('extraPassives' in sobj) {
+		for (var i = 0; i < sobj.extraPassives.length; i+=2)
+			uinfo.extraPassives[sobj.extraPassives[i]+2200000] = sobj.extraPassives[i+1];
+	}
 	if ('formation' in sobj) {
 		uinfo.formationId = sobj.formation[0];
 		uinfo.formationPos = sobj.formation[1];
 	}
 	if ('battlePassives' in sobj) {
+		// convert array of battlePassives to dict
+		var bp = {};
+		for (var i = 0; i < sobj.battlePassives.length; i+=2)
+			bp[sobj.battlePassives[i]+2200000] = sobj.battlePassives[i+1];
+		
 		for (var i = 0; i < uinfo.battlePassives.length; i++) {
 			var battlePassive = uinfo.battlePassives[i];
 			if (battlePassive.type === 0)
 				continue; // auto active (no data)
-			var sid = battlePassive.id-2200000;
-			if (sid in sobj.battlePassives)
-				battlePassive.userVal = sobj.battlePassives[sid];
+			if (battlePassive.id in bp)
+				battlePassive.userVal = bp[battlePassive.id];
 		}
 	}
 	if ('conditions' in sobj) {
@@ -426,7 +555,7 @@ function _serializedObj2UserUnit(sobj, uid) {
 	}
 	if ('terrain' in sobj) {
 		// need UI to handle explicitly
-		uinfo.tileId = sobj.terrain[0];
+		uinfo.tileId = sobj.terrain[0]+4200001;
 		uinfo.isFlameTile = (sobj.terrain[1] === 1);
 	}
 	if ('tactic' in sobj)
@@ -442,13 +571,13 @@ function _serializedObj2UserUnit(sobj, uid) {
 	return uinfo;
 }
 
-function unserializeUserUnit(uid, txt) {
+function unserializeUserUnit(uid, txt, fromPreset=false) {
 	txt = txt.trim();
 	if (txt === '') return;
 	var sobj = _serializedTxt2Obj(txt);
 	if (sobj === null)
 		return null;
-	var uinfo = _serializedObj2UserUnit(sobj, uid);
+	var uinfo = _serializedObj2UserUnit(sobj, uid, fromPreset);
 	return uinfo;
 }
 
@@ -477,6 +606,26 @@ function unserializeGameInfo(txt) {
 	weatherId = sobj.wid;
 	punits['p0'] = _serializedObj2UserUnit(sobj.p0, 'p0');
 	punits['p1'] = _serializedObj2UserUnit(sobj.p1, 'p1');
+}
+
+function _getDefaultCraftWeaponPassive(item) {
+	var enhanceGroup = findArtifactEnhanceGroup(item);
+	
+	if (enhanceGroup === 1)
+		return craftPassives[1][2710002]; // Physical Attack +% (5)
+	else if (enhanceGroup === 3)
+		return craftPassives[3][2710016]; // Offensive Tactics +% (4)
+	else // 4
+		return craftPassives[4][2710025]; // Offensive Tactics +% (4)
+}
+
+function getDefaultCraftArtifactPassive(info) {
+	var item = info.weapon.item;
+	if (!isItemCraftable(item)) {
+		delete info.weapon['pc']
+		return;
+	}
+	info.weapon['pc'] = _getDefaultCraftWeaponPassive(item);
 }
 
 function getDefaultArtifactUpgradePassive(info) {
@@ -536,6 +685,22 @@ function getDefaultRelicInfo(uinfo) {
 	}
 }
 
+function getRelationList(uinfo) {
+	uinfo.relations = {};
+	uinfo.activeRelation = {}; // map to array of active passive index
+	for (var i = 0; i < friendships.length; i++) {
+		var relation = friendships[i];
+		for (var j = 0; j < relation['unitId'].length; j++) {
+			if (uinfo.unit.id === relation['unitId'][j]) {
+				uinfo.relations[relation.id] = relation;
+				// by default, all relation is unlocked
+				uinfo.activeRelation[relation.id] = [];
+				break;
+			}
+		}
+	}
+}
+
 function getDefaultUnitTerrainId(uinfo) {
 	var battleMap = getCurrentMapInfo();
 	if (battleMap.tiles.indexOf(uinfo.tileId) === -1)
@@ -544,9 +709,14 @@ function getDefaultUnitTerrainId(uinfo) {
 
 function getUnitInfo(unit, uid) {
 	if (unit.id in unitPreset) {
-		return unserializeUserUnit(uid, unitPreset[unit.id]);
+		return unserializeUserUnit(uid, unitPreset[unit.id], true);
 	}
 	return getDefaultUnitInfo(unit, uid);
+}
+
+function isItemCraftable(item) {
+	// specific commander artifact but has only 1 passive
+	return (item.unitId !== 0 && item.passive.length === 1);
 }
 
 function getDefaultUnitInfo(unit, id) {
@@ -628,8 +798,11 @@ function getDefaultUnitInfo(unit, id) {
 		}
 	}
 	
+	getDefaultCraftArtifactPassive(uinfo);
 	getDefaultArtifactUpgradePassive(uinfo);
 	getDefaultRelicInfo(uinfo);
+	
+	getRelationList(uinfo); // fidn all possible friendship
 	
 	getDefaultUnitTerrainId(uinfo);
 	if (uinfo.unit['ep'] === 0)
@@ -691,6 +864,8 @@ function SpActionList(uinfo) {
 		var item = artifactInfo.item;
 		for (var i = 0; i < item.passive.length; i++)
 			this.addSpAction(item.passive[i], item.passiveVal[i]);
+		if ('pc' in artifactInfo)
+			this.addSpActionFromPassiveList(passiveLists[artifactInfo.pc]);
 		
 		if (artifactInfo.lv !== 0) {
 			this.addSpActionFromPassiveList(passiveLists[artifactInfo.enhance.passiveListId]);
@@ -834,6 +1009,32 @@ function UserUnit(unit, id) {
 	this.getStat = function(statName) {
 		return Math.min(2200, this.stat[statName]);
 	};
+
+	this.disableResearch = false;
+	this.setDisableResearch = function(enabled) {
+		this.disableResearch = enabled;
+		this.calculateStat();
+	};
+	
+	this.overriddenStat = null;
+	this.setOverriddenStat = function(val) {
+		this.overriddenStat = val;
+		this.calcuateAttrs();
+		this.calculateStat();
+	};
+	this.extraPassives = {};
+	this.setExtraPassive = function(passiveId, passiveVal) {
+		this.extraPassives[passiveId] = passiveVal;
+		this.calculateStat();
+	};
+	this.removeExtraPassive = function(passiveId) {
+		delete this.extraPassives[passiveId];
+		this.calculateStat();
+	};
+	this.hasResearch = function() {
+		// only can has all research or no at all (for special unit, meng mei)
+		return !this.disableResearch && this.overriddenStat === null;
+	};
 	
 	this.getPassiveTotalVal = function(passiveId, defaultVal=0) {
 		return this.spActions.getPassiveTotalVal(passiveId, defaultVal);
@@ -847,7 +1048,7 @@ function UserUnit(unit, id) {
 		var slotInfo = this[slotNames[slotNo]];
 		// if item tier is not changed, no need to find new enhance info
 		if (slotInfo.item.tier !== item.tier) {
-			slotInfo.enhance = findItemEnhance(item.tier, _findArtifactEnhanceType(item)[0], slotInfo.lv);
+			slotInfo.enhance = findItemEnhance(item.tier, _findArtifactEnhanceType(item), slotInfo.lv);
 			// verify +6/+12 passive if current passive might not able to get
 			if (slotInfo.p6 !== null && slotInfo.p6.itemTier > item.tier)
 				slotInfo.p6 = null;
@@ -855,6 +1056,14 @@ function UserUnit(unit, id) {
 				slotInfo.p12 = null;
 		}
 		slotInfo.item = item;
+		if (slotNo === 4)
+			getDefaultCraftArtifactPassive(this);
+		this.calculateStat();
+	};
+	
+	this.setCraftArtifactPassive = function(slotNo, passiveListId) {
+		var slotInfo = this[slotNames[slotNo]];
+		slotInfo.pc = passiveListId;
 		this.calculateStat();
 	};
 	
@@ -863,7 +1072,7 @@ function UserUnit(unit, id) {
 		var slotInfo = this[slotNames[slotNo]];
 		var item = slotInfo.item;
 		slotInfo.lv = lv;
-		slotInfo.enhance = findItemEnhance(item.tier, _findArtifactEnhanceType(item)[0], lv);
+		slotInfo.enhance = findItemEnhance(item.tier, _findArtifactEnhanceType(item), lv);
 		// Note: no need to check +6/+12 passive because the old is kept but never be used in calculation
 		this.calculateStat();
 	};
@@ -899,6 +1108,35 @@ function UserUnit(unit, id) {
 	
 	this.setRelicPassiveLv = function(slotIdx, lv) {
 		this.relicPassivesLv[slotIdx] = lv;
+		this.calculateStat();
+	};
+	
+	this.setRelation = function(relationId, enabled) {
+		if (relationId in this.activeRelation) {
+			if (!enabled)
+				delete this.activeRelation[relationId];
+		}
+		else {
+			if (enabled)
+				this.activeRelation[relationId] = [];
+		}
+		this.calculateStat();
+	};
+	this.setRelationPassive = function(relationId, passiveIdx, enabled) {
+		// Note: can check triggerType. all triggerType=0 MUST be enabled when one of passive is enabled
+		// but it's hard when removing. removing one of triggerType=0 (remove all?). so let user add/remove manually
+		if (!(relationId in this.activeRelation))
+			this.activeRelation[relationId] = [];
+		var activePassives = this.activeRelation[relationId];
+		var idx = activePassives.indexOf(passiveIdx);
+		if (enabled) {
+			if (idx === -1)
+				activePassives.push(passiveIdx);
+		}
+		else {
+			if (idx !== -1)
+				activePassives.splice(passiveIdx, 1);
+		}
 		this.calculateStat();
 	};
 	
@@ -958,8 +1196,17 @@ function UserUnit(unit, id) {
 			val -= 10;
 		if (val < 100 && this.hasPassive(2200037)) // Terrain Effect +
 			val = 100;
+		
+		// mountain, desert, castle, snow, river boost
+		var tilePassiveIds = [ 2200619, 2200620, 2200621, 2200622, 2200623 ];
+		for (var i = 0; i < tilePassiveIds.length; i++) {
+			var passiveId = tilePassiveIds[i];
+			if (this.hasPassive(passiveId))
+				val = Math.max(_getPassiveTerrainAdv(passiveId, this.tileId, this.isFlameTile), val);
+		}
+
 		// cavalry with heavy armor research (Enhance Horsemanship research)
-		if (isTypeHeavyCavalry(this.unit['jobTypeId']))
+		if (this.hasResearch() && isTypeHeavyCavalry(this.unit['jobTypeId']))
 			val += 5
 		
 		// 253: (Formation Effect) Rough Terrain Boost (no in game)
@@ -967,11 +1214,13 @@ function UserUnit(unit, id) {
 		if (this.hasPassive(2200036)) // Naval Battle+
 			val = Math.max(_getPassiveTerrainAdv(2200036, this.tileId, this.isFlameTile), val);
 		// 161: Water Walking (noone has. same as 036)
+		if (this.hasPassive(2200628)) // Desert Battle+
+			val = Math.max(_getPassiveTerrainAdv(2200628, this.tileId, this.isFlameTile), val);
+		if (this.hasPassive(2200591)) // Naval Battle Specialization
+			val = Math.max(_getPassiveTerrainAdv(2200591, this.tileId, this.isFlameTile), val);
 		// 453: Mountain Battle Boost (noone has. same as 454)
 		if (this.hasPassive(2200454)) // Mountain Battle Specialization
 			val = Math.max(_getPassiveTerrainAdv(2200454, this.tileId, this.isFlameTile), val);
-		if (this.hasPassive(2200591)) // Naval Battle Specialization
-			val = Math.max(_getPassiveTerrainAdv(2200591, this.tileId, this.isFlameTile), val);
 		return val;
 	};
 	
@@ -994,6 +1243,13 @@ function UserUnit(unit, id) {
 	this.canDoubleTactic = function() {
 		if (this.hasPassive(2200573) || this.hasPassive(2200574) || this.hasPassive(2200575) || this.hasPassive(2200576))
 			return false;
+		if (!this.tactic.canStreakCast) {
+			if (this.tactic.id === 2000065 && this.hasPassive(2200439))
+				return true; // azure dragon with hell gate
+			if (this.tactic.obstructiveSkill && this.hasPassive(2200568))
+				return true; // interrupt tactics with mastery
+			return false;
+		}
 		return true;
 	};
 	
@@ -1004,7 +1260,7 @@ function UserUnit(unit, id) {
 	};
 	
 	this.canCriticalTactic = function() {
-		return this.tactic.canStreakCast;
+		return this.tactic.canStreakCast || this.tactic.id == 2000065; // 4god Azure Dragon is exception
 	};
 	
 	this.alwaysCriticalAttack = function() {
@@ -1053,13 +1309,14 @@ function UserUnit(unit, id) {
 		// 106: Enemy stat Reduction (noone has)
 		new BattleSp006(),  // rage %
 		new BattleSp584(),  // Overwhelming Strength (zhang fei)
+		new BattleSp627(),  // Ma Chao of Xiliang
 		new BattleSp038(),  // second wind
 		new BattleSp537(),  // Hero of the Ages
 		// 470: God of war (noone has)
 		new BattleSp039(),  // Peerless %
 		new BattleSp160(),  // elusive
 		new BattleSp419(),  // Mental Exhaustion
-		// 455: Rage (only Awaken Azure Dragon has this passive. no implement)
+		new BattleSp455(),  // Rage (only Awaken Azure Dragon has this passive)
 		// 475: Guerrilla War (noone has)
 		new BattleSp442(),  // give and take
 		new BattleSp589(),  // Little Conquerer (sun ce)
@@ -1189,9 +1446,8 @@ function BattleSp433() { // MRL Surge (Emperor passive)
 function BattleSp011() { // Good from Evil
 	BattleSpAction.call(this, 2200011, 0);
 	this.calculate = function(uinfo) {
-		// TODO: game mode. now there is no mode that started from 100
-		var val = Math.max(50 - Math.trunc(uinfo['hpPct']), 0);
-		this.modPct = Math.min(val * 100 / (50 * 2), 48);
+		var val = Math.max(gameMode.gfe - Math.trunc(uinfo['hpPct']), 0);
+		this.modPct = Math.min(val * 100 / (gameMode.gfe * 2), 48);
 		this.calculateStatTrunc(uinfo.statBasic, this.modPct);
 	};
 }
@@ -1224,6 +1480,16 @@ function BattleSp584() { // Overwhelming Strength (zhang fei)
 	this.userText = 'Number of attacks';
 	this.calculate = function(uinfo) {
 		this.modPct = this.userVal * uinfo.getPassiveTotalVal(this.id);
+		this.atk = monoMathRound(uinfo.statBasic.atk * this.modPct / 100);
+	};
+}
+
+function BattleSp627() { // Ma Chao of Xiliang
+	BattleSpAction.call(this, 2200627, 1, 0);
+	this.userValMax = 6;
+	this.userText = 'Hit/Miss Count';
+	this.calculate = function(uinfo) {
+		this.modPct = Math.min(this.userVal * uinfo.getPassiveTotalVal(this.id), 60);
 		this.atk = monoMathRound(uinfo.statBasic.atk * this.modPct / 100);
 	};
 }
@@ -1294,6 +1560,14 @@ function BattleSp419() { // Mental Exhaustion
 			this.modPct = -this.modPct;
 			this.wis = -this.wis;
 		}
+	};
+}
+
+function BattleSp455() { // Rage (only Awaken Azure Dragon has this passive)
+	BattleSpAction.call(this, 2200455, 0);
+	this.calculate = function(uinfo) {
+		this.modPct = Math.trunc((100 - Math.trunc(uinfo['hpPct'])) / 10) * uinfo.getPassiveTotalVal(this.id);
+		this.calculateStatTrunc(uinfo.statBasic, this.modPct);
 	};
 }
 
@@ -1477,6 +1751,8 @@ function collectUnitPassives(uinfo) {
 	// relics. need to sum same relic passive values (then floor) before adding to spaction
 	var tmpRelicPassives = {};
 	for (var i = 0; i < uinfo.relicPassives.length; i++) {
+		if (uinfo.relics[i] === null)
+			continue;
 		var relicPassive = uinfo.relicPassives[i];
 		var passiveId = relicPassive['passiveId'];
 		if (!(passiveId in tmpRelicPassives))
@@ -1499,11 +1775,25 @@ function collectUnitPassives(uinfo) {
 		uinfo.spActions.addSpAction(2200116, extraPct);
 	}
 	
+	// passives from friendships
+	for (var rid in uinfo.activeRelation) {
+		var relation = uinfo.relations[rid];
+		var activePassives = uinfo.activeRelation[rid]; // array of index of active passive
+		for (var i = 0; i < activePassives.length; i++) {
+			var passiveListId = relation.passive[activePassives[i]];
+			uinfo.spActions.addSpActionFromPassiveList(passiveLists[passiveListId]);
+		}
+	}
+	
 	if (gameMode.hasFormation) {
 		// collect formation passives
 		_addFormationPassive(uinfo, 0);
 		_addFormationPassive(uinfo, 1);
 		_addFormationPassive(uinfo, uinfo.formationPos+2);
+	}
+	
+	for (var passiveId in uinfo.extraPassives) {
+		uinfo.spActions.addSpAction(passiveId, uinfo.extraPassives[passiveId]);
 	}
 	
 	// set tactic again after collected all passive to check double/critical
@@ -1525,17 +1815,21 @@ function calculateStatBasic(uinfo) {
 	hpBoost += monoMathRound(uinfo['hpMax'] * uinfo.getPassiveTotalVal(2200119) / 100); // HP Boost %
 	var mpBoost = uinfo.getPassiveTotalVal(2200120); // MP Boost
 	mpBoost += uinfo.getPassiveTotalVal(2200504); // Relic: MP Boost
-	mpBoost += monoMathRound(uinfo['hpMax'] * uinfo.getPassiveTotalVal(2200121) / 100); // MP Boost %
+	mpBoost += monoMathRound(uinfo['mpMax'] * uinfo.getPassiveTotalVal(2200121) / 100); // MP Boost %
 	for (var j = 0; j < uinfo['relics'].length; j++) {
-		hpBoost += uinfo['relics'][j]['hp'];
-		mpBoost += uinfo['relics'][j]['mp'];
+		if (uinfo.relics[j]) {
+			hpBoost += uinfo.relics[j]['hp'];
+			mpBoost += uinfo.relics[j]['mp'];
+		}
 	}
-	uinfo.hpMax += hpBoost;
+	uinfo.hpMax += hpBoost; // cap is 5000 (before multiplication from game mode)
+	if (uinfo.hpMax > 5000)
+		uinfo.hpMax = 5000
 	uinfo.mpMax = Math.min(uinfo.mpMax + mpBoost, 500);
 	uinfo.epMax = unit['ep'];
 	if (uinfo.epMax !== 0)
 		uinfo.mpMax = 0;
-	uinfo.hpMax = Math.trunc(uinfo.hpMax * gameMode.hpMul); // cap is 5000
+	uinfo.hpMax = Math.trunc(uinfo.hpMax * gameMode.hpMul);
 	// keep hp/mp percentage
 	uinfo.hp = Math.max(1, Math.trunc(uinfo.hpMax * uinfo.hpPct / 100));
 	uinfo.mp = Math.trunc(uinfo.mpMax * uinfo.mpPct / 100);
@@ -1567,6 +1861,15 @@ function calculateStatBasic(uinfo) {
 		uinfo.statBasic[statName] = result + unitType['rank12Stats'][statName];
 	}
 	
+	// stat from friendships
+	for (var rid in uinfo.activeRelation) {
+		var relation = uinfo.relations[rid];
+		for (var j = 0; j < relation['statType'].length; j++) {
+			var statName = statNames[relation['statType'][j]];
+			uinfo.statBasic[statName] += relation['statVal'][j];
+		}
+	}
+	
 	// Note: skip applying "Add*Pct" value from battle event script (no these values in Anni/PvP)
 	
 	// general equipments, artifacts and relics
@@ -1584,8 +1887,10 @@ function calculateStatBasic(uinfo) {
 		if (uinfo['kit']['enhance'])
 			uinfo.statBasic[statName] += uinfo['kit']['enhance'][statName];
 		
-		for (var j = 0; j < uinfo['relics'].length; j++)
-			uinfo.statBasic[statName] += uinfo['relics'][j][statName];
+		for (var j = 0; j < uinfo['relics'].length; j++) {
+			if (uinfo['relics'][j] !== null)
+				uinfo.statBasic[statName] += uinfo['relics'][j][statName];
+		}
 	}
 	
 	// passive stat boost
@@ -1601,6 +1906,17 @@ function calculateStatBasic(uinfo) {
 	uinfo.statBasic['agi'] += uinfo.getPassiveTotalVal(2200113);
 	uinfo.statBasic['mrl'] += monoMathRound(uinfo.statBasic['mrl'] * uinfo.getPassiveTotalVal(2200116) / 100);
 	uinfo.statBasic['mrl'] += uinfo.getPassiveTotalVal(2200115);
+	
+	if (uinfo.overriddenStat !== null) {
+		for (var i = 0; i < statNames.length; i++) {
+			var statName = statNames[i];
+			uinfo.statBasic[statName] = uinfo.overriddenStat[statName];
+		}
+		for (var i = 0; i < attrNames.length; i++) {
+			var attrName = attrNames[i];
+			uinfo.attrs[attrName] = uinfo.overriddenStat[attrName];
+		}
+	}
 }
 
 function calculateStatFromBattlePassives(uinfo) {
@@ -1753,9 +2069,6 @@ function _getDefVal(defInfo, mainStat, subStat) {
 	if (defInfo.hasPassive(2200105)) { // def stat switch
 		var subVal = defInfo.getStat(subStat);
 		defVal = monoMathRound((defVal + subVal) * defInfo.getPassiveTotalVal(2200105) / 100);
-		//var subVal = defInfo.getStat(subStat);
-		//if (subVal > defVal)
-		//	defVal = subVal;
 	}
 	return defVal;
 }
@@ -1763,25 +2076,39 @@ function _getDefVal(defInfo, mainStat, subStat) {
 function getAttackBasicDmg(atkInfo, defInfo) {
 	var atkAtk = _getAtkVal(atkInfo, 'atk', 'wis');
 	var defDef = _getDefVal(defInfo, 'def', 'wis');
+	if (atkInfo.hasPassive(2200625)) { // Gale %
+		// the correct one is only for normal or "reversal from normal". ignore reversal for now
+		if (atkInfo.attackType === 0) {
+			// - modPct = stepLeft * passiveVal
+			// now this one is only for meng mei boss. also changing display table is needed if allowing user to input step left
+			// so let user multiply the result in extra passive manually (now allow to modify step from dmg detail table)
+			atkAtk = Math.trunc(atkAtk + atkAtk * atkInfo.getPassiveTotalVal(2200625) / 100);
+		}
+	}
+	if (atkInfo.hasPassive(2200613)) { // destroy
+		defDef = monoMathRound(defDef * (1 - atkInfo.getPassiveTotalVal(2200613) / 100));
+	}
 	
 	atkAtk = monoMathRound(atkAtk * atkInfo.getTerrainAdvantage() / 100);
 	defDef = monoMathRound(defDef * defInfo.getTerrainAdvantage() / 100);
-	atkAtk += getResearchAtkBonus(atkInfo.allowItemTypes[0]);
-	// TODO: now allowed game modes are same calculation (need when implemening 4gods or other modes)
-	var dmg = Math.max(1, (atkInfo.lv + 30) + (atkAtk - defDef) * (5000 / 10000)); // min dmg is 1
-	return dmg;
+	if (atkInfo.hasResearch())
+		atkAtk += getResearchAtkBonus(atkInfo.allowItemTypes[0]);
+	var dmg = Math.max(1, (atkInfo.lv + 30) + (atkAtk - defDef) * (gameMode.pRawDmg / 10000)); // min dmg is 1
+	return [ atkAtk, defDef, dmg ];
 }
 
 function _getTacticMagicBasicDmg(atkInfo, defInfo) {
 	var atkWis = _getAtkVal(atkInfo, 'wis', 'atk');
-	var defWis = _getDefVal(defInfo, 'wis', 'def');
+	// for non physical spell. just use wis for def (no def stat switch)
+	var defWis = defInfo.getStat('wis');
 	
 	if (atkInfo.tactic.damageType === 'Fixed') // crimson lotus
 		defWis = 0;
 	
 	atkWis = monoMathRound(atkWis * atkInfo.getTerrainAdvantage() / 100);
 	defWis = monoMathRound(defWis * defInfo.getTerrainAdvantage() / 100);
-	return (atkInfo.lv + 25) + (atkWis - defWis) * (3333 / 10000);
+	var dmg = (atkInfo.lv + 25) + ((atkWis - defWis) * (3333 / 10000));
+	return [ atkWis, defWis, dmg ];
 }
 
 function _getTacticPhysicalBasicDmg(atkInfo, defInfo) {
@@ -1790,11 +2117,11 @@ function _getTacticPhysicalBasicDmg(atkInfo, defInfo) {
 	
 	atkAtk = monoMathRound(atkAtk * atkInfo.getTerrainAdvantage() / 100);
 	defDef = monoMathRound(defDef * defInfo.getTerrainAdvantage() / 100);
-	atkAtk += getResearchAtkBonus(atkInfo.allowItemTypes[0]);
-	// TODO: now allowed game modes are same calculation (need when implemening 4gods or other modes)
-	var dmg = Math.max(1, (atkInfo.lv + 30) + (atkAtk - defDef) * (5000 / 10000)); // min dmg is 1
+	if (atkInfo.hasResearch())
+		atkAtk += getResearchAtkBonus(atkInfo.allowItemTypes[0]);
+	var dmg = Math.max(1, (atkInfo.lv + 30) + (atkAtk - defDef) * (gameMode.pRawDmg / 10000)); // min dmg is 1
 	// Noone has Ignore Type Advantage (401)
-	return dmg;
+	return [ atkAtk, defDef, dmg ];
 }
 
 SIDE_ATK = 0
@@ -1901,15 +2228,15 @@ function AttackAccActionBase(actList, id, side, type, userVal=null, userType='in
 	
 	this.getIconHtml = function() {
 		var html = null;
-		if (this.passiveId) {
+		if ('imgInfo' in this) {
+			html = _iconHtml(this.imgInfo[0], this.imgInfo[1], 'frame-blue');
+		}
+		else if (this.passiveId) {
 			if (this.hasMainPassive)
-				html = getPassiveIconHtml(passives[this.passiveId]['icon'], 'frame-blue');
+				html = getPassiveIconHtml(this.passiveId, 0, 'frame-blue');
 		}
 		else if (this.techId) {
 			html = _iconHtml('tech', techIcons[research[this.techId]['icon']], 'frame-blue');
-		}
-		else if ('imgInfo' in this) {
-			html = _iconHtml(this.imgInfo[0], this.imgInfo[1], 'frame-blue');
 		}
 		return html;
 	};
@@ -1931,7 +2258,12 @@ function AttackAccActionList(atkInfo) {
 		new AttackAccSp508(this), // Relic: Melee Attack DEF Rate +
 		new AttackAccSp509(this), // Relic: Ranged Attack DEF Rate +
 		new AttackAccSp033(this), // All DEF Rate +
-		new AttackAccSp036(this), // Naval Battle + (only water related, terrain in special terrain adv)
+		new AttackAccSpTileBoost(this, 2200036), // Naval Battle + (only water related, terrain in special terrain adv)
+		new AttackAccSpTileBoost(this, 2200619), // Mountain Boost
+		new AttackAccSpTileBoost(this, 2200620), // Desert Boost
+		new AttackAccSpTileBoost(this, 2200621), // Castle Boost
+		new AttackAccSpTileBoost(this, 2200622), // Snow Boost
+		new AttackAccSpTileBoost(this, 2200623), // River Boost
 		new AttackAccSp208(this), // Narrow Escape (condition) (*0.5)
 		new AttackAccSp447(this), // Command: Attack DEF Rate Pierce (Emperor tactic)
 		new AttackAccSp413(this), // Surprise Attack
@@ -1940,6 +2272,7 @@ function AttackAccActionList(atkInfo) {
 		new AttackAccSp416(this), // Attack DEF Rate Pierce
 		new AttackAccSp505(this), // Relic: Melee Attack DEF Rate Pierce
 		new AttackAccSp506(this), // Relic: Ranged Attack DEF Rate Pierce
+		new AttackAccSp627(this), // Ma Chao of Xiliang
 		new AttackAccSp571(this), // Long-Range Archery (for extra range)
 		new AttackAccTech006(this), // Research footman
 		new AttackAccTech026(this), // Research dancer
@@ -2046,8 +2379,8 @@ function AttackAccSp033(actList) { // All DEF Rate +
 	};
 }
 
-function AttackAccSp036(actList) { // Naval Battle +
-	AttackAccActionBase.call(this, actList, 2200036, SIDE_ATK, 0);
+function AttackAccSpTileBoost(actList, actId) { // Acc boost when on specific tile
+	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
 	this.canApply = function() {
 		return (this.getAtkInfo().tileId in this.getPassive().tileAdvs);
 	};
@@ -2075,11 +2408,13 @@ function AttackAccSp208(actList) { // Narrow Escape
 
 function AttackAccSp447(actList) { // Command: Attack DEF Rate Pierce
 	AttackAccActionBase.call(this, actList, 2200447, SIDE_ATK, 2, 0, 'bool');
+	this.magic = _findObj(2000132, tactics);
+	this.imgInfo = [ 'magic', getMagicIconInfo(this.magic.icon) ];
 	this.userText = 'In Emperor Aura';
 	
 	this.adjustValue = function(acc) {
 		if (this.userVal) {
-			this.modPct = 7; // passive from Emperor tactic (fixed value here)
+			this.modPct = this.magic.skillPower;
 			this.result = Math.min(acc * (1 + this.modPct / 100), 100);
 		} else {
 			this.modPct = 0;
@@ -2144,12 +2479,23 @@ function AttackAccSp506(actList) { // Relic: Ranged Attack DEF Rate Pierce
 	};
 }
 
+function AttackAccSp627(actList) { // Ma Chao of Xiliang
+	AttackAccActionBase.call(this, actList, 2200627, SIDE_DEF, 1, 0, 'int');
+	this.userText = 'Hit/Miss Count';
+	this.userValMax = 3;
+	
+	this.adjustValue = function(acc) {
+		this.modPct = Math.min(30 + this.userVal * this.getPassiveTotalVal(), 60);
+		this.result = Math.max(acc * (1 - this.modPct / 100), 30);
+	};
+}
+
 function AttackAccSp571(actList) { // Long-Range Archery
 	AttackAccActionBase.call(this, actList, 2200571, SIDE_ATK, 1, 0, 'bool');
 	this.userText = 'Extra Range';
 	
 	this.adjustValue = function(acc) {
-		this.modPct = this.getPassiveTotalVal();
+		this.modPct = this.userVal ? this.getPassiveTotalVal() : 0;
 		this.result = Math.min(acc - acc * this.modPct / 100, 100);
 	};
 }
@@ -2157,7 +2503,8 @@ function AttackAccSp571(actList) { // Long-Range Archery
 function AttackAccTech006(actList) { // Enhance Shields
 	AttackAccActionBase.call(this, actList, 2500006, SIDE_DEF, 0);
 	this.canApply = function() {
-		return this.getDefInfo().unit.jobTypeId === 1210002;
+		var defInfo = this.getDefInfo();
+		return defInfo.hasResearch() && defInfo.unit.jobTypeId === 1210002;
 	};
 	
 	this.adjustValue = function(acc) {
@@ -2169,7 +2516,8 @@ function AttackAccTech006(actList) { // Enhance Shields
 function AttackAccTech026(actList) { // Dancer Routine
 	AttackAccActionBase.call(this, actList, 2500026, SIDE_DEF, 0);
 	this.canApply = function() {
-		return this.getDefInfo().unit.jobTypeId === 1210016;
+		var defInfo = this.getDefInfo();
+		return defInfo.hasResearch() && defInfo.unit.jobTypeId === 1210016;
 	};
 	
 	this.adjustValue = function(acc) {
@@ -2192,7 +2540,7 @@ function AttackAccSp406(actList) { // (Formation Effect) Attack ACC +%
 	
 	this.adjustValue = function(acc) {
 		this.modPct = this.getPassiveTotalVal();
-		this.result = mathClamp(acc + acc * this.modPct * 0.01, 30, 100);
+		this.result = mathClamp(acc + acc * this.modPct * 0.01, 0, 100);
 	};
 }
 
@@ -2216,11 +2564,12 @@ function TacticAccActionList(atkInfo) {
 		new TacticAccSp032(this), // Tactics DEF Rate +
 		new TacticAccSp510(this), // Relic: Tactics DEF Rate +
 		new AttackAccSp033(this), // All DEF Rate + (allowed tactics cannot self target. so can reuse)
+		new AttackAccSpTileBoost(this, 2200628), // Desert Battle+
 		new AttackAccSp208(this), // Narrow Escape (condition) (*0.5)
 		new TacticAccSp417(this), // Tactics DEF Rate Pierce
 		new TacticAccSp507(this), // Relic: Tactics DEF Rate Pierce
 		new TacticAccLightningWeather(this), // lightning accuracy when rain/snow
-		new TacticAccSp582(this), // 
+		new TacticAccSp582(this), // Tactics Defense Skill %
 		new AttackAccTech026(this), // Research dancer
 		// 404: (Formation Effect) Tactics DEF Rate +% (no use in game)
 		new TacticAccSp405(this), // (Formation Effect) All DEF Rate +%
@@ -2418,6 +2767,9 @@ function TacticAccSp405(actList) { // (Formation Effect) All DEF Rate +%
 
 function TacticDmgActionList(atkInfo) {
 	this.atkInfo = atkInfo;
+
+	this.actionPatience = new TacticDmgPatience(this, 18), // swift cavalry tactic
+	this.actionComposure = new TacticDmgComposure(this, 19), // swift cavalry tactic
 	
 	this.actionArr = [
 		new TacticDmgPower(this, 10),
@@ -2434,28 +2786,33 @@ function TacticDmgActionList(atkInfo) {
 		new TacticDmgSpBoost(this, 2200568, [16,17]), // Interrupt Tactics Mastery %
 		new TacticDmgSpBoost(this, 2200054, [0,1,2,3]), // Elemental Tactics +%
 		new TacticDmgSpBoost(this, 2200055, null), // Offensive Tactics +%
+		new TacticDmgSpBoost(this, 2200606, [], [2000105]), // Crimson Lotus Upgrade %
 		new TacticDmgSpBoost(this, 2200573, [0]), // Fire Tactics Synergy %
 		new TacticDmgSpBoost(this, 2200574, [3]), // Wind Tactics Synergy %
 		new TacticDmgSpBoost(this, 2200575, [16,17]), // Interrupt Tactics Synergy %
 		new TacticDmgSpBoost(this, 2200576, null), // Deadly Tactics
 		new TacticDmgSp438(this, 2200438), // Godly Tactics
-		new TacticDmgSpBoost(this, 2200520, [0]), // Fire Tactics Specialization %
+		new TacticDmgSpBoost(this, 2200520, [0], [2000105]), // Fire Tactics Specialization %
 		new TacticDmgSpBoost(this, 2200578, [3]), // Wind Tactics Specialization %
 		new TacticDmgSpBoost(this, 2200590, [1]), // Water Tactics Specialization %
+		new TacticDmgSp607(this, 2200607), // Hail the Yellow Sky
 		new AttackDmgSp434(this, 2200434), // Impose (Emperor passive)
 		new TacticDmgSp056(this, 2200056), // Tactics Damage -%
+		new AttackDmgSp624(this, 2200624), // Damage Taken +%
 		new TacticDmgSp588(this, 2200588), // Tactics Offset %
 		new TacticDmgSp279(this, 2200279), // Decrease Tactics Damage (no 4gods)
 		new TacticDmgSp402(this, 2200402), // Decrease Tactics Damage (by tactic power)
 		new TacticDmgSp502(this, 2200502), // Relic: Decrease Tactics Damage
-		// freezing damage reduction (only in dragon raid)
+		// freezing damage reduction (2100053, only in dragon raid)
 		new AttackDmgSp435(this, 2200435), // Dignity (Emperor passive)
 		new TacticDmgSpBoost(this, 2200058, [5]), // Seduce +%
 		new TacticDmgSpReduction(this, 2200259, 0), // Decrease Fire Tactics Damage %
 		new TacticDmgSpReduction(this, 2200260, 3), // Decrease Wind Tactics Damage %
 		new TacticDmgSpReduction(this, 2200261, 1), // Decrease Water Tactics Damage %
 		new TacticDmgSpReduction(this, 2200262, 2), // Decrease Earth Tactics Damage %
-		new TacticDmgTech030(this, 2500030), // Assess Terrain (outlaw)
+		new AttackDmgSpTileBoost(this, 2200628), // Desert Battle+
+		new TacticDmgTech030(this, 2500030), // Research: Assess Terrain (outlaw)
+		new TacticDmgTech027(this, 2500027), // Research: Ship Construction (navy)
 		//new TacticDmgSp229(this), // (Bloody Battle) Enhanced Offensive Tactics %
 		new TacticDmgWeather(this, 13), // 
 		new TacticDmgSp420(this, 2200420), // Decrease Area Tactics Damage
@@ -2485,9 +2842,10 @@ function TacticDmgActionList(atkInfo) {
 		new TacticDmgSp415(this, 2200415), // Guard
 		new TacticDmgSp422(this, 2200422), // Song: Tactics Damage -%
 		// 462: Main Attack + (noone has)
-		new TacticDmgPatience(this, 18), // swift calvary tactic
-		new TacticDmgComposure(this, 19), // swift calvary tactic
+		this.actionPatience, // swift cavalry tactic
+		this.actionComposure, // swift cavalry tactic
 		new AttackDmgFlameMark(this, 7),
+		// 599: Defense Specialization % (hardened/weakness, meng mei)
 	];
 	
 	this.setDefInfo = function(defInfo) {
@@ -2502,10 +2860,14 @@ function TacticDmgActionList(atkInfo) {
 			return;
 		}
 		
+		var res;
 		if (tactic.damageType === 'Physical')
-			this.basicDmg = _getTacticPhysicalBasicDmg(this.atkInfo, this.defInfo);
+			res = _getTacticPhysicalBasicDmg(this.atkInfo, this.defInfo);
 		else
-			this.basicDmg = _getTacticMagicBasicDmg(this.atkInfo, this.defInfo);
+			res = _getTacticMagicBasicDmg(this.atkInfo, this.defInfo);
+		this.atkVal = res[0];
+		this.defVal = res[1];
+		this.basicDmg = res[2];
 		var dmg = this.basicDmg;
 		for (var i = 0; i < this.actionArr.length; i++) {
 			var action = this.actionArr[i];
@@ -2590,6 +2952,44 @@ function TacticDmgSp438(actList, actId) { // Godly Tactics
 	};
 }
 
+function TacticDmgSp607(actList, actId) { // Hail the Yellow Sky
+	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 1, 1, 'bool');
+	this._userText = 'First hit';
+	this._userText2 = 'Main Target';
+	this.canApply = function() {
+		var tactic = this.getTactic();
+		if (tactic.id === 2000065) {
+			// choosable when using azure dragon tactic. is it first hit?
+			this.userText = this._userText;
+		}
+		else if (_isAttackSkill(tactic)) {
+			if (tactic.effectArea === 0) {
+				delete this.userText;
+				this.userVal = 1;
+			}
+			else { // aoe tactic
+				this.userText = this._userText2;
+			}
+		}
+		else {
+			return false;
+		}
+		return true;
+	};
+	
+	this.adjustValue = function(dmg) {
+		var hp = this.getAtkInfo().hp;
+		if (hp < 10 || this.userVal === 0) {
+			this.modVal = 0;
+			this.result = dmg;
+		}
+		else {
+			this.modVal = monoMathRound(hp * this.getPassiveTotalVal() * 0.01);
+			this.result = dmg + this.modVal;
+		}
+	};
+}
+
 function TacticDmgSp056(actList, actId) { // Tactics Damage -%
 	AttackAccActionBase.call(this, actList, actId, SIDE_DEF, 0);
 	this.canApply = function() {
@@ -2661,7 +3061,21 @@ function TacticDmgSpReduction(actList, actId, allowType) {
 function TacticDmgTech030(actList, actId) { // Assess Terrain (outlaw)
 	AttackAccActionBase.call(this, actList, actId, SIDE_DEF, 0);
 	this.canApply = function() {
-		return this.getTactic().skillType === 2 && this.getDefInfo().unit.jobTypeId === 1210012;
+		var defInfo = this.getDefInfo();
+		return defInfo.hasResearch() && this.getTactic().skillType === 2 && this.getDefInfo().unit.jobTypeId === 1210012;
+	};
+	
+	this.adjustValue = function(dmg) {
+		this.modPct = 50;
+		this.result = dmg - dmg * this.modPct * 0.01;
+	};
+}
+
+function TacticDmgTech027(actList, actId) { // Research: Ship Construction (navy)
+	AttackAccActionBase.call(this, actList, actId, SIDE_DEF, 0);
+	this.canApply = function() {
+		var defInfo = this.getDefInfo();
+		return defInfo.hasResearch() && this.getTactic().skillType === 1 && defInfo.unit.jobTypeId === 1210019 && defInfo.tileId === 4200014;
 	};
 	
 	this.adjustValue = function(dmg) {
@@ -2723,14 +3137,14 @@ function TacticDmgSp059(actList, actId) { // Double Tactics +%
 
 function TacticDmgNoSp059(actList, actId) {
 	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
-	this.displayName = "Double Tactics Dmg Reduction";
+	this.displayName = "Double Tactics Dmg";
 	this.canApply = function() {
 		var atkInfo = this.getAtkInfo();
 		return atkInfo.isDoubleTactic && !atkInfo.hasPassive(2200059);
 	};
 	
 	this.adjustValue = function(dmg) {
-		this.modPct = 25;
+		this.modPct = 75;
 		this.result = dmg * 75 / 100;
 	};
 }
@@ -2908,6 +3322,8 @@ function TacticDmgSp415(actList, actId) { // Guard
 
 function TacticDmgSp422(actList, actId) { // Song: Tactics Damage -%
 	AttackAccActionBase.call(this, actList, actId, SIDE_DEF, 2, 0, 'bool');
+	this.magic = _findObj(2000130, tactics);
+	this.imgInfo = [ 'magic', getMagicIconInfo(this.magic.icon) ];
 	this.userText = 'In Song Aura';
 	this.canApply = function() {
 		return _isAttackSkill(this.getTactic());
@@ -2915,7 +3331,7 @@ function TacticDmgSp422(actList, actId) { // Song: Tactics Damage -%
 	
 	this.adjustValue = function(dmg) {
 		if (this.userVal) {
-			this.modPct = 25;
+			this.modPct = this.magic.skillPower;
 			this.result = dmg - dmg * this.modPct / 100;
 		}
 		else {
@@ -2925,7 +3341,7 @@ function TacticDmgSp422(actList, actId) { // Song: Tactics Damage -%
 	};
 }
 
-function TacticDmgPatience(actList, actId) { // swift calvary Patience tactic
+function TacticDmgPatience(actList, actId) { // swift cavalry Patience tactic
 	AttackAccActionBase.call(this, actList, actId, SIDE_DEF, 1, 0, 'bool');
 	this.magic = _findObj(2000170, tactics);
 	this.getDisplayName = function() { return toLocalize(this.magic.name); };
@@ -2934,10 +3350,15 @@ function TacticDmgPatience(actList, actId) { // swift calvary Patience tactic
 	this.canApply = function() {
 		return this.getTactic().skillType !== 25 && this.getDefInfo().unit.jobTypeId === 1210078;
 	};
+	this.setUserVal = function(val) {
+		this.userVal = val;
+		if (val === 1 && this.actList.actionComposure.userVal === 1)
+			this.actList.actionComposure.userVal = 0;
+	};
 	
 	this.adjustValue = function(dmg) {
 		if (this.userVal) {
-			this.modPct = 20;
+			this.modPct = this.magic.skillPower;
 			this.result = dmg + dmg * this.modPct / 100;
 		}
 		else {
@@ -2947,7 +3368,7 @@ function TacticDmgPatience(actList, actId) { // swift calvary Patience tactic
 	};
 }
 
-function TacticDmgComposure(actList, actId) { // swift calvary Tranquility tactic
+function TacticDmgComposure(actList, actId) { // swift cavalry Tranquility tactic
 	AttackAccActionBase.call(this, actList, actId, SIDE_DEF, 1, 0, 'bool');
 	this.magic = _findObj(2000171, tactics);
 	this.getDisplayName = function() { return toLocalize(this.magic.name); };
@@ -2956,10 +3377,15 @@ function TacticDmgComposure(actList, actId) { // swift calvary Tranquility tacti
 	this.canApply = function() {
 		return this.getTactic().skillType !== 25 && this.getDefInfo().unit.jobTypeId === 1210078;
 	};
+	this.setUserVal = function(val) {
+		this.userVal = val;
+		if (val === 1 && this.actList.actionPatience.userVal === 1)
+			this.actList.actionPatience.userVal = 0;
+	};
 	
 	this.adjustValue = function(dmg) {
 		if (this.userVal) {
-			this.modPct = 20;
+			this.modPct = this.magic.skillPower;
 			this.result = dmg - dmg * this.modPct / 100;
 		}
 		else {
@@ -2979,19 +3405,25 @@ function AttackDmgActionList(atkInfo) {
 	this.actionSp543 = new AttackDmgSp543(this, 2200543); // Mortal Blaze (assume main target)
 	this.actionFlameMark = new AttackDmgFlameMark(this, 42);
 	
+	this.actionPatience = new AttackDmgPatience(this, 38), // swift cavalry tactic
+	this.actionComposure = new AttackDmgComposure(this, 39), // swift cavalry tactic
+	
 	this.actionArr = [
 		new AttackDmgRangeFold(this, 20),
+		// 041: Ignore Type Advantage
 		new AttackDmgUnitTypeAdv(this, 21),
 		new AttackDmgSp042(this, 2200042), // Ignore Mounted Attack+
 		new AttackDmgSp043(this, 2200043), // Mounted ATK +%
 		new AttackDmgTech028(this, 2500028), // Mount Slayer
 		new AttackDmgSp044(this, 2200044), // Physical Attack +%
+		new AttackDmgSp603(this, 2200603), // Approaching Shot
 		new AttackDmgSp434(this, 2200434), // Impose (Emperor passive)
 		//new AttackDmgSp228(this, 2200228), // (Bloody Battle) Enhanced Physical Attack %
-		new AttackDmgSp036(this, 2200036), // Naval Battle +
+		new AttackDmgSpTileBoost(this, 2200036), // Naval Battle +
 		new AttackDmgSp045(this, 2200045), // Physical Damage -%
-		//new AttackDmgSp448(this, 2200448), // Azure Dragon's Protection
-		//new AttackDmgSp449(this, 2200449), // Azure Dragon's Blessing
+		new AttackDmgSp045(this, 2200448), // Azure Dragon's Protection (calculation same as 045)
+		new AttackDmgSp045(this, 2200449), // Azure Dragon's Blessing (calculation same as 045)
+		new AttackDmgSp624(this, 2200624), // Damage Taken +%
 		new AttackDmgSp280(this, 2200280), // Decrease Physical Damage
 		new AttackDmgSp500(this, 2200500), // Relic: Melee Damage -
 		new AttackDmgSp046(this, 2200046), // Ranged DMG -%
@@ -2999,43 +3431,51 @@ function AttackDmgActionList(atkInfo) {
 		new AttackDmgSp435(this, 2200435), // Dignity (Emperor passive)
 		//new AttackDmgSp185(this, 2200185), // Keep (for keep only)
 		new AttackDmgSp057(this, 2200057), // MP Attack
+		new AttackDmgSp608(this, 2200608), // MP ATK%
 		new AttackDmgSp592(this, 2200592), // Desperate Countermeasure
+		new AttackDmgSp617(this, 2200617), // Lucky Feint
 		//new AttackDmgTech1019(this, 2501019), // Enhance Keep
 		new AttackDmgTech027(this, 2500027), // Research: Ship Construction (navy)
 		new AttackDmgSp446(this, 2200446), // CMD: Physical Attack +%
-		new AttackDmgDoubleSp022(this, 2200022), // Normal double attack with leading
-		new AttackDmgDoubleSp023(this, 2200023), // Normal double attack with chain
+		//new AttackDmgDoubleSp022(this, 2200022), // Normal double attack with leading
+		//new AttackDmgDoubleSp023(this, 2200023), // Normal double attack with chain
+		new AttackDmgNormal2ndHit(this, 23), // 2hit damage for normal attack (and post attack)
 		new AttackDmgDoubleSp047(this, 2200047), // Enhanced Double ATK % (normal)
+		new AttackDmg2ndHit(this, 24), // 2hit damage for (counter, reversal, phalanx, joint)
 		new AttackDmgTech014(this, 2500014), // Research: Counter Archery 1
 		new AttackDmgTech024(this, 2500024), // Research: Counter Riding
-		new AttackDmgCounter(this, 25), // Counterattack damage reduction
+		new AttackDmgCounter(this, 25), // Counterattack damage without sp096 (counterattack+)
 		new AttackDmgCounterSp096(this, 2200096), // Counterattack+
-		new AttackDmgCounterSp023(this, 2200023), // Counterattack with chain attack
-		new AttackDmgReversal(this, 28), // Reversal damage reduction
+		new AttackDmgReversal(this, 28), // Reversal damage without sp096 (counterattack+)
 		new AttackDmgReversalSp096(this, 2200096), // Counterattack+ (reversal)
-		// 533: Vermilion Bird: Quick Reflexes (for 4god only)
+		new AttackDmgReversalSp533(this, 2200533), // Vermilion Bird: Quick Reflexes (for 4god and boss) (Reversal Phalanx)
 		new AttackDmgReversalSp581(this, 2200581), // Quick Reflexes % (Reversal Phalanx)
 		new AttackDmgJoint(this, 30), // Joint attack damage reduction
 		new AttackDmgJointSp047(this, 2200047), // Enhanced Double ATK % (joint)
 		new AttackDmgJointSp445(this, 2200445), // Oathkeeper (joint)
 		new AttackDmgPhalanx(this, 32), // Phalanx attack damage reduction
 		new AttackDmgPhalanxSp047(this, 2200047), // Enhanced Double ATK % (phalanx)
-		// 533: Vermilion Bird: Quick Reflexes (for 4god only)
-		new AttackDmgPhalanxSp581(this, 2200581), // Quick Reflexes %
+		new AttackDmgPhalanxSp533(this, 2200533), // Vermilion Bird: Quick Reflexes (for 4god and boss) (phalanx)
+		new AttackDmgPhalanxSp581(this, 2200581), // Quick Reflexes % (Phalanx)
 		new AttackDmgPhalanxSp445(this, 2200445), // Oathkeeper (Phalanx)
-		new AttackDmgSp585(this, 2200585), // Zhao Family Triple Strike
 		new AttackDmgRandom(this, 35), // random damage -2 to 4
 		this.actionSp570, // wheel upgrade %
 		this.actionSp009, // % charge attack
+		new AttackDmgSp605(this, 2200605), // Aimed Shot % (likely bug, see detail in implementation)
+		new AttackDmgSp615(this, 2200615), // Fierce Strike
+		// 612: Fierce Attack. ignore special attack immunity chance (random here)
+		// 444: Comeback. for handling ignore immunity
 		new AttackDmgSp061(this, 2200061), // Critical Attack
 		new AttackDmgCriticalBonus(this, 36), // additional crit damage from luck diff
 		new AttackDmgSp062(this, 2200062), // Critical Attack+
-		// 527: Critical Hit Damage -% (only 4god bird has)
+		new AttackDmgSp527(this, 2200527), // Critical Hit Damage -% (only boss has)
 		new AttackDmgSp060(this, 2200060), // Critical Attack Immunity
 		new AttackDmgSp027c(this, 2200027), // Special Attack Immunity (crit)
+		// 611: Special Attack Defense %. special attack immunity chance
 		new AttackDmgSp017(this, 2200017), // Physical Certain Hit
 		new AttackDmgSp025(this, 2200025), // Double ATK Immunity
 		new AttackDmgSp027d(this, 2200027), // Special Attack Immunity (double)
+		// 611: Special Attack Defense %. special attack immunity chance
 		new AttackDmgTech010(this, 2500010), // Research: Ambush 1
 		//new AttackDmgTech019(this, 2500019), // Research: Enhance Siege 1
 		new AttackDmgTech023(this, 2500023), // Research: Exploit Weakness
@@ -3055,6 +3495,7 @@ function AttackDmgActionList(atkInfo) {
 		new AttackDmgSp268(this, 2200268), // Absorb Attack Damage %
 		//new AttackDmgSp523(this, 2200523), // Vermilion Bird: Scarlet Dagger
 		new AttackDmgSp272(this, 2200272), // Max Damage Defense %
+		new AttackDmgSp585(this, 2200585), // Zhao Family Triple Strike
 		new AttackDmgSp418(this, 2200418), // Deadly Attack
 		new AttackDmgSp101(this, 2200101), // Desperate Attack
 		// 462: Main Attack + (noone has)
@@ -3062,12 +3503,13 @@ function AttackDmgActionList(atkInfo) {
 		new AttackDmgSp421(this, 2200421), // Song: Physical Damage -%
 		// 522: Vermilion Bird: Fire Attack % (only 4god)
 		new AttackDmgSp542(this, 2200542), // Fire Attack % (main target only)
-		new AttackDmgPatience(this, 38), // swift calvary tactic
-		new AttackDmgComposure(this, 39), // swift calvary tactic
+		this.actionPatience, // swift cavalry tactic
+		this.actionComposure, // swift cavalry tactic
 		new AttackDmgSp443(this, 2200443), // Overwhelm
 		this.actionSp543, // Mortal Blaze (assume main target)
 		this.actionFlameMark,
 		new AttackDmgSp570e(this, 2200570), // wheel upgrade (non-main target)
+		// 599: Defense Specialization % (hardened/weakness, meng mei)
 	];
 	
 	this.setDefInfo = function(defInfo) {
@@ -3076,7 +3518,10 @@ function AttackDmgActionList(atkInfo) {
 	};
 	
 	this.calculate = function() {
-		this.basicDmg = getAttackBasicDmg(this.atkInfo, this.defInfo);
+		var res = getAttackBasicDmg(this.atkInfo, this.defInfo);
+		this.atkVal = res[0];
+		this.defVal = res[1];
+		this.basicDmg = res[2];
 		var dmg = this.basicDmg;
 		for (var i = 0; i < this.actionArr.length; i++) {
 			var action = this.actionArr[i];
@@ -3145,8 +3590,9 @@ function AttackDmgSp043(actList, actId) { // Mounted ATK +%
 function AttackDmgTech028(actList, actId) { // Research: Mount Slayer
 	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
 	this.canApply = function() {
+		var atkInfo = this.getAtkInfo();
 		var defInfo = this.getDefInfo();
-		return isCavalryUnit(defInfo.unit.jobTypeId) && !defInfo.hasPassive(2200042) && this.getAtkInfo().unit.jobTypeId === 1210005;
+		return atkInfo.hasResearch() && isCavalryUnit(defInfo.unit.jobTypeId) && !defInfo.hasPassive(2200042) && atkInfo.unit.jobTypeId === 1210005;
 	};
 	
 	this.adjustValue = function(dmg) {
@@ -3164,6 +3610,19 @@ function AttackDmgSp044(actList, actId) { // Physical Attack +%
 	};
 }
 
+function AttackDmgSp603(actList, actId) { // Approaching Shot
+	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 1, 2, 'int');
+	this.userText = 'Distance';
+	this.userValMin = 1;
+	this.userValMax = 5;
+	
+	this.adjustValue = function(dmg) {
+		var distance = Math.max(5 - this.userVal, 0);
+		this.modPct = distance * 5; // max is 20%. no need to use min() because of distance value can be 0-4
+		this.result = dmg * (1 + this.modPct / 100);
+	};
+}
+
 function AttackDmgSp434(actList, actId) { // Impose (Emperor passive)
 	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
 	
@@ -3175,7 +3634,7 @@ function AttackDmgSp434(actList, actId) { // Impose (Emperor passive)
 	};
 }
 
-function AttackDmgSp036(actList, actId) { // Naval Battle +
+function AttackDmgSpTileBoost(actList, actId) { // // damage boost when on specific tile
 	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
 	this.canApply = function() {
 		return (this.getAtkInfo().tileId in this.getPassive().tileAdvs);
@@ -3193,6 +3652,15 @@ function AttackDmgSp045(actList, actId) { // Physical Attack -%
 	this.adjustValue = function(dmg) {
 		this.modPct = this.getPassiveTotalVal();
 		this.result = Math.max(0, dmg - dmg * this.modPct / 100);
+	};
+}
+
+function AttackDmgSp624(actList, actId) { // Damage Taken +%
+	AttackAccActionBase.call(this, actList, actId, SIDE_DEF, 0);
+	
+	this.adjustValue = function(dmg) {
+		this.modPct = this.getPassiveTotalVal();
+		this.result = dmg + dmg * this.modPct / 100;
 	};
 }
 
@@ -3245,7 +3713,7 @@ function AttackDmgSp435(actList, actId) { // Dignity (Emperor passive)
 	AttackAccActionBase.call(this, actList, actId, SIDE_DEF, 0);
 	
 	this.adjustValue = function(dmg) {
-		var atkMrl = this.getDefInfo().stat['mrl'];
+		var atkMrl = this.getAtkInfo().stat['mrl'];
 		var val = Math.ceil((this.getDefInfo().stat['mrl'] - atkMrl) / atkMrl / 2 * 100);
 		this.modPct = mathClamp(val, 0, this.getPassiveTotalVal());
 		this.result = dmg * (1 - this.modPct / 100);
@@ -3257,6 +3725,18 @@ function AttackDmgSp057(actList, actId) { // MP Attack
 	
 	this.adjustValue = function(dmg) {
 		this.modVal = this.getAtkInfo().mp; // Note: ToG is round(mp*0.5)
+		this.result = dmg + this.modVal;
+	};
+}
+
+function AttackDmgSp608(actList, actId) { // MP ATK%
+	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
+	this.canApply = function() {
+		return !this.getAtkInfo().hasPassive(2200057);
+	};
+	
+	this.adjustValue = function(dmg) {
+		this.modVal = this.getAtkInfo().mp * this.getPassiveTotalVal() / 100;
 		this.result = dmg + this.modVal;
 	};
 }
@@ -3277,11 +3757,29 @@ function AttackDmgSp592(actList, actId) { // Desperate Countermeasure
 	};
 }
 
+function AttackDmgSp617(actList, actId) { // Lucky Feint
+	AttackAccActionBase.call(this, actList, actId, SIDE_DEF, 1, 0, 'bool');
+	this.userText = 'Activate';
+	this.canApply = function() {
+		return this.getAtkInfo().attackType === 1; // must be counterattack
+	};
+	
+	this.adjustValue = function(dmg) {
+		if (this.userVal) {
+			this.modPct = this.getPassiveTotalVal();
+			this.result = dmg * (1 - this.modPct / 100);
+		} else {
+			this.modPct = 0;
+			this.result = dmg;
+		}
+	};
+}
+
 function AttackDmgTech027(actList, actId) { // Research: Ship Construction (navy)
 	AttackAccActionBase.call(this, actList, actId, SIDE_DEF, 0);
 	this.canApply = function() {
 		var defInfo = this.getDefInfo();
-		return this.getAtkInfo().attackRole === 'Range' && defInfo.unit.jobTypeId === 1210019 && defInfo.tileId === 4200014;
+		return defInfo.hasResearch() && this.getAtkInfo().attackRole === 'Range' && defInfo.unit.jobTypeId === 1210019 && defInfo.tileId === 4200014;
 	};
 	
 	this.adjustValue = function(dmg) {
@@ -3292,11 +3790,13 @@ function AttackDmgTech027(actList, actId) { // Research: Ship Construction (navy
 
 function AttackDmgSp446(actList, actId) { // CMD: Physical Attack +%
 	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 2, 0, 'bool');
+	this.magic = _findObj(2000131, tactics);
+	this.imgInfo = [ 'magic', getMagicIconInfo(this.magic.icon) ];
 	this.userText = 'In Emperor Aura';
 	
 	this.adjustValue = function(dmg) {
 		if (this.userVal) {
-			this.modPct = 15; // passive from Emperor tactic (fixed value here)
+			this.modPct = this.magic.skillPower;
 			this.result = dmg * (100 + this.modPct) / 100;
 		} else {
 			this.modPct = 0;
@@ -3316,27 +3816,32 @@ function _getDoubleAttackModPct(atkInfo, defInfo) {
 	return 100;
 }
 
-function AttackDmgDoubleSp022(actList, actId) { // Normal double attack with leading
+function AttackDmgNormal2ndHit(actList, actId) { // Normal double attack
 	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
+	this.getDisplayName = function() {
+		var atkInfo = this.getAtkInfo();
+		if (this.modPct !== 100) {
+			if (atkInfo.hasPassive(2200023))
+				return "2nd hit with "+toLocalize(passives[2200023].name);
+			else if (atkInfo.hasPassive(2200022))
+				return "2nd hit with "+toLocalize(passives[2200022].name);
+			return "2nd hit damage (bug)"
+		}
+		if (!atkInfo.hasPassive(2200022) && !atkInfo.hasPassive(2200023))
+			return "Natural 2nd hit damage";
+		return "2nd hit with AGI 3x damage";
+	};
 	this.canApply = function() {
-		var atkInfo = this.getAtkInfo(); // must no chain
-		return _isNormalDoubleAttack(atkInfo) && !atkInfo.hasPassive(2200023);
+		var atkInfo = this.getAtkInfo();
+		return _isNormalDoubleAttack(atkInfo);
 	};
 	
 	this.adjustValue = function(dmg) {
-		this.modPct = _getDoubleAttackModPct(this.getAtkInfo(), this.getDefInfo());
-		this.result = dmg * this.modPct / 100;
-	};
-}
-
-function AttackDmgDoubleSp023(actList, actId) { // Normal double attack with chain
-	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
-	this.canApply = function() {
-		return _isNormalDoubleAttack(this.getAtkInfo());
-	};
-	
-	this.adjustValue = function(dmg) {
-		this.modPct = _getDoubleAttackModPct(this.getAtkInfo(), this.getDefInfo());
+		var atkInfo = this.getAtkInfo();
+		if (!atkInfo.hasPassive(2200022) && !atkInfo.hasPassive(2200023))
+			this.modPct = 100;
+		else
+			this.modPct = _getDoubleAttackModPct(atkInfo, this.getDefInfo());
 		this.result = dmg * this.modPct / 100;
 	};
 }
@@ -3353,13 +3858,27 @@ function AttackDmgDoubleSp047(actList, actId) { // Enhanced Double ATK % (Normal
 	};
 }
 
+function AttackDmg2ndHit(actList, actId) { // 2hit damage reduction for (counter, reversal, phalanx, joint)
+	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
+	this.displayName = "2nd hit Damage";
+	this.canApply = function() {
+		var atkInfo = this.getAtkInfo();
+		return (atkInfo.attackType >= 1 && atkInfo.attackType <= 4) && atkInfo.isDoubleAttack;
+	};
+	
+	this.adjustValue = function(dmg) {
+		this.modPct = _getDoubleAttackModPct(this.getAtkInfo(), this.getDefInfo());
+		this.result = dmg * this.modPct / 100;
+	};
+}
+
 function AttackDmgTech014(actList, actId) { // Research: Counter Archery 1
 	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 2, 0, 'bool');
 	this.userText = 'Enemy in blind spot';
 	this.canApply = function() {
 		var atkInfo = this.getAtkInfo();
-		if (atkInfo.attackType !== 1 || atkInfo.hasPassive(2200094))
-			return false; // Unlimited Counterattack
+		if (!atkInfo.hasResearch() || atkInfo.attackType !== 1 || atkInfo.hasPassive(2200094))
+			return false; // no research or Unlimited Counterattack
 		var weaponType = atkInfo.allowItemTypes[0];
 		return weaponType === 3 || weaponType === 4; // bow or xbow
 	};
@@ -3381,8 +3900,8 @@ function AttackDmgTech024(actList, actId) { // Research: Counter Riding
 	this.userText = 'Enemy in blind spot';
 	this.canApply = function() {
 		var atkInfo = this.getAtkInfo();
-		if (atkInfo.attackType !== 1 || atkInfo.hasPassive(2200094))
-			return false; // Unlimited Counterattack
+		if (!atkInfo.hasResearch() || atkInfo.attackType !== 1 || atkInfo.hasPassive(2200094))
+			return false; // no research or Unlimited Counterattack
 		return atkInfo.unit.jobTypeId === 1210006; // light cavalry only
 	};
 	
@@ -3398,54 +3917,37 @@ function AttackDmgTech024(actList, actId) { // Research: Counter Riding
 	};
 }
 
-function AttackDmgCounter(actList, actId) { // Counterattack without passives
+function AttackDmgCounter(actList, actId) { // Counterattack without counterattack+
 	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
 	this.displayName = 'Counterattack Damage';
 	this.canApply = function() {
-		// no counterattack+ and chain attack
+		// no counterattack+
 		var atkInfo = this.getAtkInfo();
-		return atkInfo.attackType === 1  && !atkInfo.hasPassive(2200096) && !atkInfo.hasPassive(2200023);
+		return atkInfo.attackType === 1  && !atkInfo.hasPassive(2200096);
 	};
 	
 	this.adjustValue = function(dmg) {
-		this.modPct = 75;
-		this.result = dmg * 0.75;
+		this.modPct = _getDoubleAttackModPct(this.getAtkInfo(), this.getDefInfo());
+		this.result = dmg * this.modPct / 100;
 	};
 }
 
 function AttackDmgCounterSp096(actList, actId) { // Counterattack+
 	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
 	this.canApply = function() {
-		// no chain attack
-		var atkInfo = this.getAtkInfo();
-		return atkInfo.attackType === 1 && !atkInfo.hasPassive(2200023);
+		return this.getAtkInfo().attackType === 1;
 	};
 	
 	this.adjustValue = function(dmg) {
+		this.modPct = 100;
 		this.result = dmg;
 	};
 }
 
-function AttackDmgCounterSp023(actList, actId) { // Counterattack with chain attack
-	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
-	this.getDisplayName = function() {
-		return 'Counterattack damage with '+ toLocalize(passives[this.passiveId]['name']);
-	};
-	
-	this.canApply = function() {
-		var modPct = _getDoubleAttackModPct(this.getAtkInfo(), this.getDefInfo());
-		return this.getAtkInfo().attackType === 1 && modPct !== 100;
-	};
-	
-	this.adjustValue = function(dmg) {
-		this.modPct = 75; // TODO: decide again regarding to display info
-		this.result = dmg * 75 / 100;
-	};
-}
-
-function AttackDmgReversal(actList, actId) { // Reversal without passive
+function AttackDmgReversal(actList, actId) { // Reversal without counterattack+
 	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
 	this.displayName = 'Reversal Damage';
+	this.imgInfo = getPassiveIconInfo(passives[2200092].icon);
 	this.canApply = function() {
 		// no counterattack+
 		var atkInfo = this.getAtkInfo();
@@ -3453,8 +3955,8 @@ function AttackDmgReversal(actList, actId) { // Reversal without passive
 	};
 	
 	this.adjustValue = function(dmg) {
-		this.modPct = 75;
-		this.result = dmg * 0.75;
+		this.modPct = _getDoubleAttackModPct(this.getAtkInfo(), this.getDefInfo());;
+		this.result = dmg * this.modPct / 100;
 	};
 }
 
@@ -3466,6 +3968,26 @@ function AttackDmgReversalSp096(actList, actId) { // Counterattack+ (reversal ca
 	
 	this.adjustValue = function(dmg) {
 		this.result = dmg;
+	};
+}
+
+function AttackDmgReversalSp533(actList, actId) { // Vermilion Bird: Quick Reflexes (for 4god and boss only) (Reversal Phalanx)
+	AttackAccActionBase.call(this, actList, actId, SIDE_DEF, 1, 0, 'bool');
+	this.userText = 'Reversal Phalanx';
+	this.canApply = function() {
+		var atkInfo = this.getAtkInfo(); // must have phalanx
+		return atkInfo.attackType === 3 && atkInfo.hasPassive(2200097);
+	};
+	
+	this.adjustValue = function(dmg) {
+		if (this.userVal) {
+			this.modPct = this.getPassiveTotalVal();
+			this.result = dmg - (dmg * this.modPct * 0.01);
+		}
+		else {
+			this.modPct = 0;
+			this.result = dmg;
+		}
 	};
 }
 
@@ -3492,6 +4014,7 @@ function AttackDmgReversalSp581(actList, actId) { // Quick Reflexes % (Reversal 
 function AttackDmgJoint(actList, actId) { // Joint attack damage reduction
 	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
 	this.displayName = 'Joint Attack Damage';
+	this.imgInfo = [ 'jointImg', [0,0] ];
 	this.canApply = function() {
 		return this.getAtkInfo().attackType === 2;
 	};
@@ -3529,6 +4052,7 @@ function AttackDmgJointSp445(actList, actId) { // Oathkeeper (joint)
 function AttackDmgPhalanx(actList, actId) { // Phalanx attack damage reduction
 	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
 	this.displayName = 'Phalanx Attack Damage';
+	this.imgInfo = getPassiveIconInfo(passives[2200097].icon);
 	this.canApply = function() {
 		return this.getAtkInfo().attackType === 4;
 	};
@@ -3548,6 +4072,18 @@ function AttackDmgPhalanxSp047(actList, actId) { // Enhanced Double ATK % (phala
 	this.adjustValue = function(dmg) {
 		this.modPct = this.getPassiveTotalVal();
 		this.result = dmg * (100 + this.modPct) / 100;
+	};
+}
+
+function AttackDmgPhalanxSp533(actList, actId) { // Vermilion Bird: Quick Reflexes (for 4god and boss) (phalanx)
+	AttackAccActionBase.call(this, actList, actId, SIDE_DEF, 0);
+	this.canApply = function() {
+		return this.getAtkInfo().attackType === 4;
+	};
+	
+	this.adjustValue = function(dmg) {
+		this.modPct = this.getPassiveTotalVal();
+		this.result = dmg - (dmg * this.modPct * 0.01);
 	};
 }
 
@@ -3572,15 +4108,6 @@ function AttackDmgPhalanxSp445(actList, actId) { // Oathkeeper (Phalanx)
 	this.adjustValue = function(dmg) {
 		this.modPct = this.getPassiveTotalVal();
 		this.result = dmg * (1 + this.modPct * 0.01);
-	};
-}
-
-function AttackDmgSp585(actList, actId) { // Zhao Family Triple Strike
-	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
-	
-	this.adjustValue = function(dmg) {
-		this.modPct = this.getPassiveTotalVal();
-		this.result = dmg * this.modPct * 0.01;
 	};
 }
 
@@ -3621,6 +4148,10 @@ function AttackDmgSp009(actList, actId) { // % Charge Attack
 		this.userVal = userVal;
 		this.actList.actionSp570.userVal = userVal; // change userVal userVal too
 	};
+	// because of aimed shot bug, canApply() is needed to disable this passive when unit has aimed shot
+	this.canApply = function() {
+		return !this.getAtkInfo().hasPassive(2200605);
+	};
 		
 	this.adjustValue = function(dmg) {
 		this.modPct = this.getPassiveTotalVal() * this.userVal;
@@ -3628,6 +4159,39 @@ function AttackDmgSp009(actList, actId) { // % Charge Attack
 		if (this.getAtkInfo().hasPassive(2200570))
 			modPct += this.actList.actionSp570.modPct;
 		this.result =  dmg * (1 + modPct * 0.01);
+	};
+}
+
+function AttackDmgSp605(actList, actId) { // Aimed Shot %
+	// modPct should be merged with charge attack but not. likely bug
+	// currently, this passive override "% Charge Attack" and use wrong value from wheel upgrade for addition
+	// while this passive is opposite of wheel/charge passive, so the below implementation assume no one 
+	//   use charge passive with aimed shot
+	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 1, 3, 'int');
+	this.userText = 'Step Left';
+	this.userValMax = 10;
+	this.canApply = function() {
+		// TODO:
+		// cannot be phalanx, reversal, counterattack (counter because of enemy first strike is ok)
+		var attackType = this.getAtkInfo().attackType;
+		return attackType !== 1 && attackType !== 3 && attackType !== 4;
+	};
+	
+	this.adjustValue = function(dmg) {
+		this.modPct = Math.min(this.userVal * this.getPassiveTotalVal(), 40);
+		this.result = dmg * (1 + this.modPct / 100);
+	};
+}
+
+function AttackDmgSp615(actList, actId) { // Fierce Strike
+	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 1, 2, 'int');
+	this.userText = 'Distance';
+	this.userValMin = 1;
+	this.userValMax = 6;
+	
+	this.adjustValue = function(dmg) {
+		this.modPct = Math.min(this.userVal * this.getPassiveTotalVal(), 30);
+		this.result = dmg * (1 + this.modPct / 100);
 	};
 }
 
@@ -3666,6 +4230,18 @@ function AttackDmgSp062(actList, actId) { // Critical Attack+
 	this.adjustValue = function(dmg) {
 		this.modPct = this.getPassiveTotalVal();
 		this.result = dmg * (1 + this.modPct/100);
+	};
+}
+
+function AttackDmgSp527(actList, actId) { // Critical Hit Damage -%
+	AttackAccActionBase.call(this, actList, actId, SIDE_DEF, 0);
+	this.canApply = function() {
+		return this.getAtkInfo().isCriticalAttack;
+	};
+	
+	this.adjustValue = function(dmg) {
+		this.modPct = this.getPassiveTotalVal();
+		this.result = dmg * (1 - this.modPct/100);
 	};
 }
 
@@ -3736,7 +4312,7 @@ function AttackDmgTech010(actList, actId) { // Research: Ambush
 	this.canApply = function() {
 		var atkInfo = this.getAtkInfo();
 		// all forest tile is 4200003, 4200044 (snow), 4200047 (peach), 4200051 (night)
-		return atkInfo.allowItemTypes[0] === 2 && atkInfo.tileId === 4200003;
+		return atkInfo.hasResearch() && atkInfo.allowItemTypes[0] === 2 && atkInfo.tileId === 4200003;
 	};
 	
 	this.adjustValue = function(dmg) {
@@ -3749,7 +4325,7 @@ function AttackDmgTech023(actList, actId) { // Research: Exploit Weakness
 	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
 	this.canApply = function() {
 		var weaponType = this.getAtkInfo().allowItemTypes[0];
-		return weaponType === 3 && weaponType === 4;
+		return this.getAtkInfo().hasResearch() && (weaponType === 3 || weaponType === 4);
 	};
 	
 	this.adjustValue = function(dmg) {
@@ -3893,6 +4469,15 @@ function AttackDmgSp272(actList, actId) { // Max Damage Defense %
 	};
 }
 
+function AttackDmgSp585(actList, actId) { // Zhao Family Triple Strike
+	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
+	
+	this.adjustValue = function(dmg) {
+		this.modPct = this.getPassiveTotalVal();
+		this.result = dmg * this.modPct * 0.01;
+	};
+}
+
 function AttackDmgSp418(actList, actId) { // Deadly Attack
 	AttackAccActionBase.call(this, actList, actId, SIDE_ATK, 0);
 	this.canApply = function() {
@@ -3940,11 +4525,13 @@ function AttackDmgSp415(actList, actId) { // Guard
 
 function AttackDmgSp421(actList, actId) { // Song: Physical Damage -%
 	AttackAccActionBase.call(this, actList, actId, SIDE_DEF, 2, 0, 'bool');
+	this.magic = _findObj(2000129, tactics);
+	this.imgInfo = [ 'magic', getMagicIconInfo(this.magic.icon) ];
 	this.userText = 'In Song Aura';
 	
 	this.adjustValue = function(dmg) {
 		if (this.userVal) {
-			this.modPct = 25;
+			this.modPct = this.magic.skillPower;
 			this.result = dmg - dmg * this.modPct / 100;
 		}
 		else {
@@ -3982,7 +4569,7 @@ function AttackDmgSp542(actList, actId) { // Fire Attack % (main target only)
 	};
 }
 
-function AttackDmgPatience(actList, actId) { // swift calvary Patience tactic
+function AttackDmgPatience(actList, actId) { // swift cavalry Patience tactic
 	AttackAccActionBase.call(this, actList, actId, SIDE_DEF, 2, 0, 'bool');
 	this.magic = _findObj(2000170, tactics);
 	this.getDisplayName = function() { return toLocalize(this.magic.name); };
@@ -3991,10 +4578,15 @@ function AttackDmgPatience(actList, actId) { // swift calvary Patience tactic
 	this.canApply = function() {
 		return this.getDefInfo().unit.jobTypeId === 1210078;
 	};
+	this.setUserVal = function(val) {
+		this.userVal = val;
+		if (val === 1 && this.actList.actionComposure.userVal === 1)
+			this.actList.actionComposure.userVal = 0;
+	};
 	
 	this.adjustValue = function(dmg) {
 		if (this.userVal) {
-			this.modPct = 20;
+			this.modPct = this.magic.skillPower;
 			this.result = dmg - dmg * this.modPct / 100;
 		}
 		else {
@@ -4004,7 +4596,7 @@ function AttackDmgPatience(actList, actId) { // swift calvary Patience tactic
 	};
 }
 
-function AttackDmgComposure(actList, actId) { // swift calvary Tranquility tactic
+function AttackDmgComposure(actList, actId) { // swift cavalry Tranquility tactic
 	AttackAccActionBase.call(this, actList, actId, SIDE_DEF, 2, 0, 'bool');
 	this.magic = _findObj(2000171, tactics);
 	this.getDisplayName = function() { return toLocalize(this.magic.name); };
@@ -4013,10 +4605,15 @@ function AttackDmgComposure(actList, actId) { // swift calvary Tranquility tacti
 	this.canApply = function() {
 		return this.getDefInfo().unit.jobTypeId === 1210078;
 	};
+	this.setUserVal = function(val) {
+		this.userVal = val;
+		if (val === 1 && this.actList.actionPatience.userVal === 1)
+			this.actList.actionPatience.userVal = 0;
+	};
 	
 	this.adjustValue = function(dmg) {
 		if (this.userVal) {
-			this.modPct = 20;
+			this.modPct = this.magic.skillPower;
 			this.result = dmg + dmg * this.modPct / 100;
 		}
 		else {

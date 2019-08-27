@@ -340,11 +340,11 @@ table.bFormation td.space {
   z-index: 6;
   background-color: #111;
   overflow-x: hidden;
-  padding-top: 60px;
+  padding-top: 40px;
 }
 
 .sidenav a {
-  padding: 8px 8px 8px 12px;
+  padding: 6px 8px 6px 12px;
   text-decoration: none;
   font-size: 16px;
   color: #818181;
@@ -598,6 +598,15 @@ span.absInside {
   transform-origin: 0 0;
 }
 
+.relationImg {
+  display: inline-block;
+  background: url('imgs/relation.png') no-repeat;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  transform-origin: 0 0;
+}
+
 .jointImg {
   display: inline-block;
   background: url('imgs/joint.png'), rgba(200,200,20,.2) no-repeat;
@@ -814,6 +823,156 @@ button.battleOpt {
   height: 100%;
 }
 
+.inputStat {
+  width: 60px;
+}
+
+button.custom {
+  color: #bbb;
+  border: none;
+  outline:none;
+  cursor: pointer;
+}
+
 span.iconInactive {
   box-shadow:inset 0 0 0 20px rgba(10,10,10,0.7);
+}
+
+.relationBlock {
+  width: 1000px;
+  max-width: 1000px;
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid black;
+}
+
+.relationName {
+  flex-basis: 800px;
+  border-bottom: 1px solid black;
+  border-right: 1px solid black;
+  background-color: #fffacd;
+  padding-left: 5px;
+}
+
+.relationString {
+  flex-basis: 189px;
+  border-bottom: 1px solid black;
+  background-color: #fffacd;
+  padding: 1px 0 0 5px;
+}
+
+.relationUnits {
+  flex-basis: 220px;
+  border-right: 1px solid black;
+  padding: 2px 2px 0 2px;
+}
+
+.relationStats {
+  flex-basis: 80px;
+  border-right: 1px solid black;
+  padding: 2px 2px 0 2px;
+}
+
+.relationPassives {
+  flex-basis: 686px;
+  padding: 2px 2px 0 2px;
+}
+
+.relationPassives table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.relationPassives table td {
+  vertical-align: top;
+  padding: 0 0 0 0;
+  font-size: 14px;
+}
+
+td.relationPTxt {
+  padding: 0 5px 0 2px !important;
+  width: 250px;
+}
+
+td.relationTrigger {
+  padding-left: 5px !important;
+  position: relative;
+}
+
+td.relationTrigger:after {
+  content:"";
+  background: black;
+  position: absolute;
+  top: 5%;
+  left: 0;
+  height: 90%;
+  width: 1px;
+}
+
+/* Customize the label (the container) */
+.chkBoxContainer {
+  display: block;
+  position: relative;
+  padding-left: 35px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  font-size: 16px;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Hide the browser's default checkbox */
+.chkBoxContainer input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+/* Create a custom checkbox */
+.checkmark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 25px;
+  width: 25px;
+  background-color: #eee;
+}
+
+/* On mouse-over, add a grey background color */
+.chkBoxContainer:hover input ~ .checkmark {
+  background-color: #ccc;
+}
+
+/* When the checkbox is checked, add a blue background */
+.chkBoxContainer input:checked ~ .checkmark {
+  background-color: #2196F3;
+}
+
+/* Create the checkmark/indicator (hidden when not checked) */
+.checkmark:after {
+  content: "";
+  position: absolute;
+  display: none;
+}
+
+/* Show the checkmark when checked */
+.chkBoxContainer input:checked ~ .checkmark:after {
+  display: block;
+}
+
+/* Style the checkmark/indicator */
+.chkBoxContainer .checkmark:after {
+  left: 9px;
+  top: 5px;
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 3px 3px 0;
+  -webkit-transform: rotate(45deg);
+  -ms-transform: rotate(45deg);
+  transform: rotate(45deg);
 }

@@ -23,6 +23,7 @@
 <script type="text/javascript" src="imgs/tech.js"></script>
 <script type="text/javascript">
 var punits = {};
+var unitsMap = {};
 
 function lPassiveName(pid) {
 	return toLocalize(passives[pid].name);
@@ -32,7 +33,8 @@ function popupNote() {
 	var html = '';
 	html += '<p>For non English player, you can change language on top right dropdown.';
 	html += ' It will change many in-game words to selected langauge, included this note.</p>';
-	html += '<p>To use this page, basically you can click on images/buttons to change the equipments/passives/value.</p>';
+	html += '<p>To use this page, basically try clicking on images/buttons to change the equipments/passives/value.'
+	html += ' You can also click on damage and accuracy result number to see/modify the calculation detail.</p>';
 	
 	html += '<p>Here is the short guide for this page after clicking on<br/>';
 	html += '- <b>Code</b> button: get/set code string of this page setup (Game Mode, Map, Weather, ...)<br/>';
@@ -42,7 +44,10 @@ function popupNote() {
 	html += '- <b>Battle Passives</b> button: show detail of passives that affect hero stat in battle map. ';
 	html +=   'You can modify some passives that affect hero stat in battle too, such as '+lPassiveName(2200008)+', '+lPassiveName(2200596)+'<br/>';
 	html += '- <b>Buff/Debuff</b> button: modify and show detail of hero buff/debuff<br/>';
-	html += '- <b>Spell</b> image: change the casting spell to see damage, accuracy of selected spell<br/>';
+	html += '- <b>Attack</b> image: change the attack type to see damage, accuracy of selected type.';
+	html += ' 2nd hit and '+lPassiveName(2200061)+' can be quickly toggle from small images below this one<br/>';
+	html += '- <b>Spell</b> image: change the casting spell to see damage, accuracy of selected spell';
+	html += ' 2nd hit and '+lPassiveName(2200061)+' can be quickly toggle from small images below this one<br/>';
 	html += '- <b>Dmg/Acc</b> result box: see detail how damage and accuracy is calculated. ';
 	html +=   'In popup, you can change attack type ('+toLocalize(atkTypes[2][0])+', '+toLocalize(atkTypes[5][0])+', ...), '+lPassiveName(2200061)+'. ';
 	html +=   'You also can modify some passive value and see the change immediately.';
@@ -51,6 +56,7 @@ function popupNote() {
 	html += '<p><b>Notes:</b><br/>';
 	html += '- You can see the game version that is used for stat/dmg/acc calculation near Note button<br/>';
 	html += '- All commanders are level 99. All formation level is level 90<br/>'
+	html += '- All '+toLocalize('연구')+' are maxed<br/>'
 	html += '- Equipment cannot be unequipped<br/>'
 	html += '- Currently, post damage (damage after main attack. in game, the second damage number that shown on victim) is not implemented. ';
 	html +=   'Example passives that have effect in post damage are '+lPassiveName(2200090)+', '+lPassiveName(2200225)+', '+lPassiveName(2200065);
@@ -66,10 +72,11 @@ function popupNote() {
 function popupGameCode() {
 	document.getElementById("modalHeader").innerHTML = "Data Code";
 	
+	var gameCode = serializeGameInfo();
 	var textarea = document.createElement('textarea');
 	textarea.rows = 5;
 	textarea.cols = 100;
-	textarea.value = serializeGameInfo();
+	textarea.value = gameCode;
 	textarea.addEventListener("keyup", function(evt) {
 		if (evt.keyCode == 13) {
 			evt.preventDefault();
@@ -96,7 +103,9 @@ function popupGameCode() {
 	};
 	
 	var content = document.getElementById("modalContent");
-	content.innerHTML = '';
+	var url = window.location.href.split('?')[0].split('#')[0];
+	url += '?code='+gameCode;
+	content.innerHTML = '<div><a href="'+url+'">Link to this setup</a></div>';
 	content.appendChild(textarea);
 	content.appendChild(document.createElement('br'));
 	content.appendChild(btnApply);
@@ -477,11 +486,11 @@ function popupSelectArtifact(uid, slotNo) {
 		
 		var html = '';
 		if (item["passive"].length > 0) {
-			var iconHtml = makePreTxtIconHtml(getPassiveIconHtml(passives[item['passive'][0]]['icon']));
+			var iconHtml = makePreTxtIconHtml(getPassiveIconHtml(item['passive'][0], item['passiveVal'][0]));
 			html += "<p style='height:30px'>" + iconHtml + localizePassiveName(item['passive'][0], item['passiveVal'][0]) + "</p>";
 		}
 		if (item["passive"].length > 1) {
-			var iconHtml = makePreTxtIconHtml(getPassiveIconHtml(passives[item['passive'][1]]['icon']));
+			var iconHtml = makePreTxtIconHtml(getPassiveIconHtml(item['passive'][1], item['passiveVal'][1]));
 			html += "<p>" + iconHtml + localizePassiveName(item['passive'][1], item['passiveVal'][1]) + "</p>";
 		}
 		document.getElementById('artiPassives').innerHTML = html;
@@ -521,14 +530,91 @@ function popupSelectArtifact(uid, slotNo) {
 
 function _popupPassiveInfo(passiveId, passiveVal) {
 	var passive = passives[passiveId];
-	var hdr = makePreTxtIconHtml(getPassiveIconHtml(passive['icon'])) + "&nbsp;" + toLocalizes(passive["name"], " &nbsp; ");
+	var hdr = makePreTxtIconHtml(getPassiveIconHtml(passiveId, passiveVal)) + "&nbsp;" + toLocalizes(passive["name"], " &nbsp; ");
 	document.getElementById("modalHeader").innerHTML = hdr;
 	document.getElementById("modalContent").innerHTML = getHtmlPassiveDesc(passiveId, passiveVal);
 	document.getElementById("modalDiv").style.display = "block";
 }
 
+function popupSelectCraftArtifactPassive(uid, slotNo, idx) {
+	// no check if item is specific commander craftable weapon (must be checked before calling this function)
+	var uinfo = punits[uid];
+	var item = uinfo[slotNames[slotNo]].item;
+	var enhanceGroup = findArtifactEnhanceGroup(item);
+	var allowCraftPassives = craftPassives[enhanceGroup];
+	
+	var selectedSpan = null;
+	var selectedPassiveListId = uinfo.weapon.pc;
+	
+	var divFlex = document.createElement("div");
+	divFlex.style.display = 'flex';
+	
+	var divLeft = document.createElement("div");
+	divLeft.style.minWidth = "250px";
+	
+	var i = 0;
+	for (var craftPassiveId in allowCraftPassives) {
+		var passiveListId = allowCraftPassives[craftPassiveId];
+		var passiveList = passiveLists[passiveListId];
+		var passiveId = passiveList['passiveId'];
+		if (i > 0 && (i % 5) === 0)
+			divLeft.appendChild(document.createElement("br"));
+		var iconInfo = getPassiveIconInfo(passives[passiveId]['icon']);
+		var imgSpan = document.createElement("span");
+		imgSpan.className = iconInfo[0] + " frame-selectable";
+		if (passiveListId === selectedPassiveListId) {
+			imgSpan.classList.add("frame-selected");
+			selectedSpan = imgSpan;
+		}
+		imgSpan.style.backgroundPosition = "-"+iconInfo[1][0]+"px -"+iconInfo[1][1]+"px";
+		imgSpan.itemPassive = passiveListId;
+		imgSpan.addEventListener("click", onSelectCraftPassive);
+		divLeft.appendChild(imgSpan);
+		i++;
+	}
+	
+	function getArtifactPassiveInfoHtml(passiveListId) {
+		if (!passiveListId) return '';
+		var passiveList = passiveLists[passiveListId];
+		var html = '<b>'+localizePassiveName(passiveList['passiveId'], -1, ' ')+'</b><br/>';
+		html += getHtmlPassiveListDesc(passiveList, true);
+		return html;
+	}
+	
+	var divRight = document.createElement("div");
+	divRight.innerHTML = getArtifactPassiveInfoHtml(selectedPassiveListId);
+	
+	divFlex.appendChild(divLeft);
+	divFlex.appendChild(divRight);
+	
+	function onSelectCraftPassive(evt) {
+		var ele = evt.target;
+		if (ele === selectedSpan) {
+			document.getElementById("modalDiv").style.display = "none";
+			return;
+		}
+		if (selectedSpan)
+			selectedSpan.classList.remove("frame-selected");
+		ele.classList.add("frame-selected");
+		selectedSpan = ele;
+		divRight.innerHTML = getArtifactPassiveInfoHtml(ele.itemPassive);
+		uinfo.setCraftArtifactPassive(slotNo, ele.itemPassive);
+	}
+
+	document.getElementById("modalHeader").innerHTML = "<div style='height:1px'></div>";
+	var content = document.getElementById("modalContent");
+	content.innerHTML = '';
+	content.appendChild(divFlex);
+	document.getElementById("modalDiv").style.display = "block";
+}
+
 function popupArtifactPassive(uid, slotNo, idx) {
 	var item = punits[uid][slotNames[slotNo]].item;
+	if (isItemCraftable(item) && idx === 1) {
+		// specific commander craftable weapon
+		popupSelectCraftArtifactPassive(uid, slotNo, idx);
+		return;
+	}
 	if (item.passive.length <= idx)
 		return;
 	var passiveId = item.passive[idx];
@@ -546,7 +632,7 @@ function popupSelectArtifactUpgradePassive(uid, slotNo, passiveLv) {
 	var selectedItemPassive = currentSlotInfo['p'+passiveLv];
 	
 	// show only unique passive with highest value
-	var allowedEnhanceTypes = (passiveLv === 6) ? [1] : _findArtifactEnhanceType(artifact);
+	var allowedEnhanceTypes = (passiveLv === 6) ? [1] : findArtifactPassive12Group(artifact);
 	var availPassiveDict = {};
 	for (var enhancePassiveId in itemEnhancePassives) {
 		var itemPassive = itemEnhancePassives[enhancePassiveId];
@@ -646,22 +732,23 @@ function popupSelectCommanderPassive(uid, slotIdx) {
 		if (i > 0 && (i % 4) === 0)
 			divLeft.appendChild(document.createElement("br"));
 		var passiveList = uinfo['commanderPasiveLists'][i];
-		var icon = passiveIcons[passives[passiveList['passiveId']]['icon']];
+		var iconInfo = getPassiveIconInfo(getPassiveListIconName(passiveList));
 		var imgSpan = document.createElement("span");
 		var selectable = true;
+		imgSpan.className = iconInfo[0]
 		if (i === selectedIdx) {
-			imgSpan.className = "passive frame-selectable frame-selected";
+			imgSpan.className += " frame-selectable frame-selected";
 			selectedSpan = imgSpan;
 		}
 		else if (uinfo['selectedPassiveLists'].indexOf(i) === -1) {
-			imgSpan.className = "passive frame-selectable";
+			imgSpan.className += " frame-selectable";
 		}
 		else {
-			imgSpan.className = "passive frame-noselect";
+			imgSpan.className += " frame-noselect";
 			imgSpan.innerHTML = '<span class="overlay-disable"></span>';
 			selectable = false;
 		}
-		imgSpan.style.backgroundPosition = "-"+icon[0]+"px -"+icon[1]+"px";
+		imgSpan.style.backgroundPosition = "-"+iconInfo[1][0]+"px -"+iconInfo[1][1]+"px";
 		imgSpan.listIdx = i;
 		if (selectable)
 			imgSpan.addEventListener("click", onSelectCommanderPassive);
@@ -774,7 +861,7 @@ function popupSelectRelicSet(uid) {
 
 function popupSelectRelic(uid, slotIdx) {
 	var uinfo = punits[uid];
-	var selectedRelic = uinfo['relics'][slotIdx];
+	var selectedRelic = uinfo.relics[slotIdx]; // might be null
 	var selectedSpan = null;
 
 	var sortedRelics = [];
@@ -820,7 +907,18 @@ function popupSelectRelic(uid, slotIdx) {
 		divLeft.appendChild(imgSpan);
 	}
 	
-	function getRelicInfoHtml(relic) {
+	var btnRemove = document.createElement('button');
+	btnRemove.innerText = 'Remove';
+	btnRemove.addEventListener("click", onRemoveRelic);
+	
+	var divRight = document.createElement("div");
+	if (selectedRelic)
+		setRelicInfoHtml(selectedRelic);
+	
+	divFlex.appendChild(divLeft);
+	divFlex.appendChild(divRight);
+
+	function setRelicInfoHtml(relic) {
 		var html = '<b>'+toLocalizes(relic["name"], ' ')+'</b><br/>';
 		html += '<b>Star:</b> ' + relic['tier'] + '<br/>';
 		var statTable = '<table class="stats"><tr><th>ATK</th><th>WIS</th><th>DEF</th><th>AGI</th><th>MRL</th><th>HP</th><th>MP</th></tr>';
@@ -830,25 +928,26 @@ function popupSelectRelic(uid, slotIdx) {
 		statTable += "<td>" + relic["mrl"] + "</td><td>" + relic["hp"] + "</td>";
 		statTable += "<td>" + relic["mp"] + "</td></tr></table>";
 		html += "<p>" + statTable + "</p>";
-		return html;
+		divRight.innerHTML = html;
+		divRight.appendChild(btnRemove);
 	}
 	
-	var divRight = document.createElement("div");
-	divRight.innerHTML = getRelicInfoHtml(selectedRelic);
+	function onRemoveRelic(evt) {
+		uinfo.setRelic(slotIdx, null);
+		document.getElementById("modalDiv").style.display = "none";
+	}
 	
-	divFlex.appendChild(divLeft);
-	divFlex.appendChild(divRight);
-
 	function onSelectRelic(evt) {
 		var ele = evt.target;
 		if (ele === selectedSpan) {
 			document.getElementById("modalDiv").style.display = "none";
 			return;
 		}
-		selectedSpan.classList.remove("frame-selected");
+		if (selectedSpan)
+			selectedSpan.classList.remove("frame-selected");
 		ele.classList.add("frame-selected");
 		selectedSpan = ele;
-		divRight.innerHTML = getRelicInfoHtml(ele.relic);
+		setRelicInfoHtml(ele.relic);
 		uinfo.setRelic(slotIdx, ele.relic);
 	}
 
@@ -861,8 +960,10 @@ function popupSelectRelic(uid, slotIdx) {
 
 function popupSelectRelicPassive(uid, slotIdx) {
 	var uinfo = punits[uid];
-	var selectedRelicPassive = uinfo['relicPassives'][slotIdx];
-	var selectedRelicPassiveLv = uinfo['relicPassivesLv'][slotIdx];
+	if (uinfo.relics[slotIdx] === null)
+		return;
+	var selectedRelicPassive = uinfo.relicPassives[slotIdx];
+	var selectedRelicPassiveLv = uinfo.relicPassivesLv[slotIdx];
 	var selectedSpan = null;
 
 	var divFlex = document.createElement("div");
@@ -952,26 +1053,151 @@ function popupSelectRelicPassive(uid, slotIdx) {
 	document.getElementById("modalDiv").style.display = "block";
 }
 
+function popupSelectRelation(uid) {
+	var uinfo = punits[uid];
+
+	var divRoot = document.createElement("div");
+	
+	for (var rid in uinfo.relations) {
+		var relation = uinfo.relations[rid];
+		var chkTxt = '';
+		var activePassives = [];
+		if (rid in uinfo.activeRelation) {
+			chkTxt = 'checked="checked"';
+			activePassives = uinfo.activeRelation[rid];
+		}
+		
+		var divRelation = document.createElement("div");
+		
+		var inputId = 'rel'+relation.id;
+		var html = '<label class="chkBoxContainer"><div>';
+		var faces = [];
+		for (var j = 0; j < relation['unitId'].length; j++) {
+			var unit = unitsMap[relation['unitId'][j]];
+			faces.push('<span class="face-mini frame-blue">' + getFaceIconHtml(unit['face']) + '</span> ');
+		}
+		html += makePreTxtIconHtml(faces.join(' ')) + toLocalize(relation['name']);
+		var stats = [];
+		for (var j = 0; j < relation['statType'].length; j++) {
+			stats.push(statNames[relation['statType'][j]].toUpperCase() + ' +' + relation['statVal'][j]);
+		}
+		html += ' ('+stats.join(', ')+')</div>';
+		html += '<input type="checkbox" id="'+inputId+'" '+chkTxt+'/><span class="checkmark"></span></label>';
+		divRelation.innerHTML = html;
+		
+		divRoot.appendChild(divRelation);
+		var div = document.createElement("div");
+		div.style.clear = 'both';
+		divRoot.appendChild(div);
+		
+		for (var j = 0; j < relation['passive'].length; j++) {
+			var passiveList = passiveLists[relation['passive'][j]];
+			var unitCount = relation['passiveUnitCount'][j];
+			var triggerType = relation['passiveType'][j];
+			
+			var divPassive = document.createElement("div");
+			divPassive.style.marginLeft = '35px';
+			
+			var chkTxt = '';
+			if (activePassives.indexOf(j) !== -1)
+				chkTxt = 'checked="checked"';
+			
+			var inputId = 'relp'+relation.id+'_'+j;
+			var html = '<label class="chkBoxContainer"><div>';
+			html += makePreTxtIconHtml(getPassiveIconHtml(passiveList['passiveId'], passiveList['val'], 'frame-blue'));
+			html += localizePassiveName(passiveList["passiveId"], passiveList["val"], '', false);
+			html += ' | ' + getRelationTriggerText(triggerType, unitCount, false);
+			html += '</div>';
+			html += '<input type="checkbox" id="'+inputId+'" '+chkTxt+'/><span class="checkmark"></span></label>';
+			
+			divPassive.innerHTML = html;
+			divRoot.appendChild(divPassive);
+			var div = document.createElement("div");
+			div.style.clear = 'both';
+			divRoot.appendChild(div);
+		}
+		var div = document.createElement("hr");
+		divRoot.appendChild(div);
+	}
+	
+	if (Object.keys(uinfo.relations).length === 0) {
+		// empty divRoot
+		divRoot.innerHTML = "No "+toLocalize('인연');
+	}
+	
+	document.getElementById("modalHeader").innerHTML = "<div style='height:1px'></div>";
+	var content = document.getElementById("modalContent");
+	content.innerHTML = '';
+	content.appendChild(divRoot);
+	document.getElementById("modalDiv").style.display = "block";
+
+	function onRelationChange(evt) {
+		var chkId = evt.target.id;
+		var rid = Number(chkId.substr(3, 7));
+		uinfo.setRelation(rid, evt.target.checked);
+		if (!evt.target.checked) {
+			// remove all passive too
+			var relation = uinfo.relations[rid];
+			for (var j = 0; j < relation['passive'].length; j++)
+				document.getElementById('relp'+rid+'_'+j).checked = false;
+		}
+	}
+
+	function onRelationPassiveChange(evt) {
+		var chkId = evt.target.id;
+		var rid = Number(chkId.substr(4, 7));
+		var pIdx = Number(chkId.substr(chkId.length - 1)); // assume number of passive is less than 10
+		uinfo.setRelationPassive(rid, pIdx, evt.target.checked);
+		if (evt.target.checked) {
+			// enable the main relation too
+			document.getElementById('rel'+rid).checked = true;
+		}
+	}
+	
+	// loop again to set onchange event
+	for (var rid in uinfo.relations) {
+		var relation = uinfo.relations[rid];
+		document.getElementById('rel'+rid).addEventListener('change', onRelationChange);
+		for (var j = 0; j < relation['passive'].length; j++) {
+			document.getElementById('relp'+rid+'_'+j).addEventListener('change', onRelationPassiveChange);
+		}
+	}
+}
+
 function setBackgroundPosition(eleId, icon) {
 	document.getElementById(eleId).style.backgroundPosition = "-"+icon[0]+"px -"+icon[1]+"px";
 }
 
-function setPassivePic(eleId, passive) {
-	var iconName = (passive === null) ? 'spAction_Bg' : passive['icon'];
-	var className = 'passive';
-	var icon = passiveIcons[iconName];
-	if (!icon) {
-		icon = magicIcons[iconName];
-		className = 'magic';
-	}
+function setPassivePic(eleId, passiveId=0, passiveVal=0) {
+	var iconName = (passiveId === 0) ? 'spAction_Bg' : getPassiveIconName(passiveId, passiveVal);
+	var iconInfo = getPassiveIconInfo(iconName);
 	var ele = document.getElementById(eleId);
 	ele.classList.remove('passive', 'magic');
-	ele.classList.add(className);
-	ele.style.backgroundPosition = "-"+icon[0]+"px -"+icon[1]+"px";
+	ele.classList.add(iconInfo[0]);
+	ele.style.backgroundPosition = "-"+iconInfo[1][0]+"px -"+iconInfo[1][1]+"px";
 }
 
 function setPassiveListPic(eleId, passiveList) {
-	setPassivePic(eleId, passiveList ? passives[passiveList['passiveId']] : null);
+	if (passiveList)
+		setPassivePic(eleId, passiveList['passiveId'], passiveList['val']);
+	else
+		setPassivePic(eleId);
+}
+
+function setRelicPic(eleId, relic) {
+	var icon, className;
+	if (relic === null) {
+		icon = passiveIcons['spAction_Bg'];
+		className = 'passive';
+	}
+	else {
+		icon = relicIcons[relic['icon']];
+		className = 'relic';
+	}
+	var ele = document.getElementById(eleId);
+	ele.classList.remove('passive', 'relic');
+	ele.classList.add(className);
+	ele.style.backgroundPosition = "-"+icon[0]+"px -"+icon[1]+"px";
 }
 
 function setCommanderArtifactPics(artifactInfo, slotName) {
@@ -981,8 +1207,13 @@ function setCommanderArtifactPics(artifactInfo, slotName) {
 	
 	// artifact passive (commander artifact has 2 passives)
 	var passiveIds = item['passive'];
-	setPassivePic(slotName+'p1', passives[passiveIds[0]]);
-	setPassivePic(slotName+'p2', (passiveIds.length > 1) ? passives[passiveIds[1]] : null);
+	setPassivePic(slotName+'p1', passiveIds[0], item['passiveVal'][0]);
+	if (passiveIds.length > 1)
+		setPassivePic(slotName+'p2', passiveIds[1], item['passiveVal'][1]);
+	else if (isItemCraftable(item))
+		setPassiveListPic(slotName+'p2', passiveLists[artifactInfo.pc]);
+	else
+		setPassivePic(slotName+'p2', 0);
 	
 	setPassiveListPic(slotName+'u6', (artifactInfo['lv'] >= 6 && artifactInfo['p6']) ? getItemEnhancePassiveList(artifactInfo['p6']) : null);
 	setPassiveListPic(slotName+'u12', (artifactInfo['lv'] == 12 && artifactInfo['p12']) ? getItemEnhancePassiveList(artifactInfo['p12']) : null);
@@ -1028,8 +1259,7 @@ function fillCommanderInfo(uinfo) {
 	
 	var utypePassives = unitType["job5"]["passives"];
 	for (var i = 0; i < utypePassives.length; i++) {
-		var passive = passives[utypePassives[i][0]];
-		setPassivePic(uinfo.id+'utp'+i, passive);
+		setPassivePic(uinfo.id+'utp'+i, utypePassives[i][0], utypePassives[i][1]);
 	}
 	
 	// commander passives
@@ -1038,12 +1268,12 @@ function fillCommanderInfo(uinfo) {
 	
 	setPassiveListPic(uinfo.id+'relicSet', uinfo['relicSet'] ? passiveLists[uinfo['relicSet']['passiveListId']] : null);
 	for (var i = 0; i < uinfo['relics'].length; i++) {
-		setBackgroundPosition(uinfo.id+'r'+i, relicIcons[uinfo['relics'][i]['icon']]);
+		setRelicPic(uinfo.id+'r'+i, uinfo['relics'][i]);
 	}
 	
 	for (var i = 0; i < uinfo['relicPassives'].length; i++) {
-		setPassivePic(uinfo.id+'rp'+i, passives[uinfo['relicPassives'][i]['passiveId']]);
-		document.getElementById(uinfo.id+'rp'+i+'lv').innerText = 'Lv' + uinfo['relicPassivesLv'][i];
+		setPassivePic(uinfo.id+'rp'+i, uinfo.relics[i] ? uinfo['relicPassives'][i]['passiveId'] : 0);
+		document.getElementById(uinfo.id+'rp'+i+'lv').innerText = uinfo.relics[i] ? ('Lv' + uinfo['relicPassivesLv'][i]) : '';
 	}
 	
 	updateUnitHpMp(uinfo);
@@ -1096,6 +1326,7 @@ function onUnitInfoChanged(uinfo, basicChanged, battlePassiveChanged, conditionC
 	if (formationChanged)
 		setFormationButton(uinfo);
 	updateUnitStats(uinfo);
+	document.getElementById(uinfo.id+'terrain').style.color = uinfo.isFlameTile ? 'red' : '';
 	if ('p1' in punits) // ready on both side
 		calculateDamageInfo();
 }
@@ -1185,6 +1416,223 @@ function onTrainStep(btn) {
 	onTrainSlider(slider);
 }
 
+function popupCustomStat(uid) {
+	var uinfo = punits[uid];
+	// TODO: allow specify terrain adv
+	
+	var divFlex = document.createElement("div");
+	divFlex.style.display = 'inline-flex';
+	
+	function _filterPassiveSelection(txt) {
+		txt = txt.trim();
+		for (var passiveId in passives) {
+			var passive = passives[passiveId];
+			if (passive['desc'].indexOf('{2}') !== -1 || passive['desc'].indexOf('{3}') !== -1 || passive['desc'].indexOf('{4}') !== -1)
+				continue;
+			var tr = document.getElementById("ssp"+passiveId);
+			if (txt === "")
+				tr.style.display = "";
+			else if (inLocalizeText(passive['name'], txt))
+				tr.style.display = "";
+			else
+				tr.style.display = "none";
+		}
+	}
+
+	var divFilter = document.createElement('div');
+	divFilter.appendChild(createTextNode('span', 'Filter: '));
+	var inputFilter = document.createElement('input');
+	inputFilter.type = 'text';
+	inputFilter.id = 'filterSelectCmd';
+	inputFilter.oninput = function() { _filterPassiveSelection(this.value); };
+	divFilter.appendChild(inputFilter);
+	
+	var hdrHtml = '<span style="width:42px"></span><span style="width:200px">Name</span>';
+	var divHdr = createHtmlNode('div', hdrHtml);
+	divHdr.className = 'listhdr';
+	divHdr.style.width = '300px';
+	divFilter.appendChild(divHdr);
+	
+	function onSelectPassive(evt) {
+		var ele = evt.target;
+		while (ele.tagName !== 'LI')
+			ele = ele.parentNode;
+		var passiveId = Number(ele.id.substring(3));
+		if (!(passiveId in uinfo.extraPassives)) {
+			uinfo.setExtraPassive(passiveId, 0);
+			addExtraPassiveRow(passiveId, 0);
+		}
+	}
+	
+	var ul = document.createElement('ul');
+	ul.className = 'list';
+	ul.style.height = '315px';
+	ul.style.width = '300px';
+	for (var passiveId in passives) {
+		var passive = passives[passiveId];
+		if (passive['desc'].indexOf('{2}') !== -1 || passive['desc'].indexOf('{3}') !== -1 || passive['desc'].indexOf('{4}') !== -1)
+			continue;
+		var li = document.createElement('li');
+		li.id = 'ssp'+passiveId;
+		li.addEventListener("click", onSelectPassive);
+		
+		var liHtml = getPassiveIconHtml(passiveId, 0, 'frame-blue');
+		liHtml += '<span class="text" style="width:200px">'+toLocalize(passive['name'])+'</span>';
+		li.innerHTML = liHtml;
+		ul.appendChild(li);
+	}
+
+	var divLeft = document.createElement("div");
+	divLeft.style.minWidth = "340px";
+	divLeft.appendChild(divFilter);
+	divLeft.appendChild(ul);
+	
+	var ptable = document.createElement('table');
+	ptable.className = "table-container table-popup";
+	ptable.innerHTML = '<colgroup><col style="width:42px"/><col/><col style="width:100px"/><col style="width:40px"/></colgroup>';
+	
+	function removeExtraPassive(evt) {
+		var ele = evt.target;
+		while (ele.tagName !== 'TR')
+			ele = ele.parentNode;
+		uinfo.removeExtraPassive(ele.passiveId);
+		ele.parentNode.removeChild(ele);
+	}
+	
+	function onInputPassiveVal(evt) {
+		var ele = evt.target;
+		while (ele.tagName !== 'TR')
+			ele = ele.parentNode;
+		uinfo.setExtraPassive(ele.passiveId, Number(evt.target.value));
+	}
+	
+	function addExtraPassiveRow(passiveId, passiveVal) {
+		var passive = passives[passiveId];
+		var row = ptable.insertRow(-1);
+		row.passiveId = passiveId;
+		var cell = row.insertCell(0);
+		cell.className = "img";
+		cell.innerHTML = getPassiveIconHtml(passiveId, passiveVal, 'frame-blue');
+		// passive name
+		cell = row.insertCell(-1);
+		cell.innerHTML = toLocalize(passive['name']);
+		// passive value
+		cell = row.insertCell(-1);
+		cell.className = "number";
+		var input = document.createElement("input");
+		input.type = "number";
+		input.value = passiveVal;
+		input.style.width = "60px";
+		input.oninput = onInputPassiveVal;
+		cell.appendChild(input);
+		// remove passive column
+		cell = row.insertCell(-1);
+		var rmBtn = document.createElement("span");
+		rmBtn.className = 'clickable';
+		rmBtn.style.fontSize = '24px';
+		rmBtn.innerHTML = '&times;';
+		rmBtn.onclick = removeExtraPassive;
+		cell.appendChild(rmBtn);
+	}
+	
+	for (var passiveId in uinfo.extraPassives)
+		addExtraPassiveRow(passiveId, uinfo.extraPassives[passiveId]);
+	
+	var divRight = document.createElement('div');
+	divRight.appendChild(createTextNode('div', 'Additional Passives:'));
+	divRight.appendChild(ptable);
+	
+	divFlex.appendChild(divLeft);
+	divFlex.appendChild(divRight);
+	
+	document.getElementById("modalHeader").innerHTML = "Custom Unit";
+	var divStat = document.createElement('div');
+	divStat.style.marginTop = '10px';
+	
+	var hasCustomStat = (uinfo.overriddenStat !== null);
+	var html = '';
+	html += '<div><input id="chkNoResearch" type="checkbox"><label for="chkNoResearch">Disable Research</label></div>';
+	html += '<div><input id="chkCustomStat" type="checkbox"><label for="chkCustomStat">Enable Stat Overridden</label></div>';
+	html += '<div style="padding-top:2px">';
+	html += 'STR: <input id="strCustom" class="inputStat" type="number" value="200"> ';
+	html += 'INT: <input id="intCustom" class="inputStat" type="number" value="200"> ';
+	html += 'CMD: <input id="cmdCustom" class="inputStat" type="number" value="200"> ';
+	html += 'DEX: <input id="dexCustom" class="inputStat" type="number" value="200"> ';
+	html += 'LCK: <input id="lckCustom" class="inputStat" type="number" value="200">';
+	html += '<br/>';
+	html += 'ATK: <input id="atkCustom" class="inputStat" type="number" value="1000"> ';
+	html += 'WIS: <input id="wisCustom" class="inputStat" type="number" value="1000"> ';
+	html += 'DEF: <input id="defCustom" class="inputStat" type="number" value="1000"> ';
+	html += 'AGI: <input id="agiCustom" class="inputStat" type="number" value="1000"> ';
+	html += 'MRL: <input id="mrlCustom" class="inputStat" type="number" value="1000">';
+	html += '</div>';
+
+	divStat.innerHTML = html;
+	
+	var content = document.getElementById("modalContent");
+	content.innerHTML = '';
+	content.appendChild(divFlex);
+	content.appendChild(divStat);
+	document.getElementById("modalDiv").style.display = "block";
+	
+	function onToggleDisableResearch() {
+		uinfo.setDisableResearch(this.checked);
+	}
+	
+	var ele = document.getElementById('chkNoResearch');
+	ele.checked = uinfo.disableResearch;
+	ele.onclick = onToggleDisableResearch;
+	
+	function updateCustomStat() {
+		if (!hasCustomStat)
+			return; // do nothing
+		var stat = {};
+		for (var i = 0; i < statNames.length; i++) {
+			var statName = statNames[i];
+			var val = Number(document.getElementById(statName + 'Custom').value);
+			if (val <= 0) val = 200;
+			stat[statName] = val;
+		}
+		for (var i = 0; i < attrNames.length; i++) {
+			var attrName = attrNames[i];
+			var val = Number(document.getElementById(attrName + 'Custom').value);
+			if (val <= 0) val = 1000;
+			stat[attrName] = val;
+		}
+		uinfo.setOverriddenStat(stat);
+		updateUnitAttributeInfo(uinfo);
+	}
+	
+	function onToggleCustomStat() {
+		if (this.checked) {
+			hasCustomStat = true;
+			updateCustomStat();
+		}
+		else {
+			hasCustomStat = false;
+			uinfo.setOverriddenStat(null);
+			updateUnitAttributeInfo(uinfo);
+		}
+	}
+	
+	var ele = document.getElementById('chkCustomStat');
+	ele.checked = hasCustomStat;
+	ele.onclick = onToggleCustomStat;
+	
+	for (var i = 0; i < statNames.length; i++) {
+		var statName = statNames[i];
+		var ele = document.getElementById(statName + 'Custom');
+		ele.value = uinfo.statBasic[statName];
+		ele.oninput = updateCustomStat;
+	}
+	for (var i = 0; i < attrNames.length; i++) {
+		var attrName = attrNames[i];
+		var ele = document.getElementById(attrName + 'Custom');
+		ele.value = uinfo.attrs[attrName];
+		ele.oninput = updateCustomStat;
+	}
+}
+
 function updateBattlePassiveIcons(uinfo) {
 	var frame = document.getElementById(uinfo.id+'battleIcons');
 	frame.innerHTML = '';
@@ -1199,7 +1647,7 @@ function updateBattlePassiveIcons(uinfo) {
 		if (!battlePassive.isActivated())
 			continue;
 		var passive = battlePassive.getPassive();
-		var spanIcon = createHtmlNode('span', getPassiveIconHtml(passive['icon']));
+		var spanIcon = createHtmlNode('span', getPassiveIconNameHtml(passive['icon']));
 		spanIcon.className = 'icon20 frame-orange';
 		frame.appendChild(spanIcon);
 		numIcon++;
@@ -1381,7 +1829,7 @@ function popupBattlePassives(uid) {
 		// img
 		cell = row.insertCell(0);
 		cell.className = "img";
-		cell.innerHTML = getPassiveIconHtml(passive['icon'], 'frame-blue');
+		cell.innerHTML = getPassiveIconNameHtml(passive['icon'], 'frame-blue');
 		// passive name
 		cell = row.insertCell(-1);
 		cell.innerHTML = toLocalize(passive['name']) + ' (<span>' + getDecimalText(battlePassive.modPct) + '</span>%)';
@@ -1950,10 +2398,18 @@ function _actionAccTableRowsCreator(uinfo, tableEle, actionList) {
 		var cellIdx = (action.side === 0) ? 1 : 4;
 		cells[cellIdx].getElementsByTagName('span')[0].innerText = getModTxt(action);
 		cells[2].innerText = getDecimalText(action.result);
-		if (action.type !== 0 && action.userValType === 'int') {
-			var input = cells[cellIdx].getElementsByTagName('input')[0];
-			if (action.userVal !== Number(input.value))
-				input.value = action.userVal;
+		if ('userText' in action) {
+			var inputs = cells[cellIdx].getElementsByTagName('input');
+			if (action.userValType === 'int') {
+				var input = inputs[0];
+				if (action.userVal !== Number(input.value))
+					input.value = action.userVal;
+			}
+			else { // 'bool'
+				var input = inputs[action.userVal ? 0 : 1];
+				if (!input.checked)
+					input.checked = true;
+			}
 		}
 	}
 	
@@ -2103,7 +2559,7 @@ function _actionAccTableRowsCreator(uinfo, tableEle, actionList) {
 				var div = document.createElement("div");
 				div.className = 'subPassiveBlock';
 				// img
-				var spanIcon = createHtmlNode('span', getPassiveIconHtml(subPassive['icon']));
+				var spanIcon = createHtmlNode('span', getPassiveIconNameHtml(subPassive['icon']));
 				spanIcon.className = 'icon30 frame-orange';
 				var spanPretxt = document.createElement("span");
 				spanPretxt.className = 'icon-pretxt';
@@ -2187,13 +2643,21 @@ function popupAttackDmg(uid) {
 	html += 'ATK: '+uinfo.getStat('atk');
 	if (uinfo.hasPassive(2200104)) // atk stat switch
 		html += ', WIS: '+uinfo.getStat('wis');
-	html += '<br/>Terrain Adv: '+uinfo.getTerrainAdvantage()+', '+toLocalize('연구')+': ATK +'+getResearchAtkBonus(uinfo.allowItemTypes[0])+'</td>';
+	if (uinfo.hasPassive(2200625) && uinfo.attackType === 0) // Gale %
+		html += '<br/>Passive: '+toLocalize(passives[2200625]['name'])+' ('+uinfo.getPassiveTotalVal(2200625)+')';
+	if (uinfo.hasPassive(2200613)) // destroy
+		html += '<br/>Passive: '+toLocalize(passives[2200613]['name'])+' ('+uinfo.getPassiveTotalVal(2200613)+')';
+	html += '<br/>';
+	if (uinfo.hasResearch())
+		html += toLocalize('연구')+': ATK +'+getResearchAtkBonus(uinfo.allowItemTypes[0])+', ';
+	html += 'Terrain Adv: '+uinfo.getTerrainAdvantage();
+	html += ' => '+uinfo.attackDmgActionList.atkVal+'</td>';
 	html += '<td class="number">'+getDecimalText(uinfo.attackDmgActionList.basicDmg)+'</td>';
 	html += '<td></td><td>';
 	html += 'DEF: '+defInfo.getStat('def');
 	if (defInfo.hasPassive(2200105)) // def stat switch
 		html += ', WIS: '+defInfo.getStat('wis');
-	html += '<br/>Terrain Adv: '+defInfo.getTerrainAdvantage()+'</td>';
+	html += '<br/>Terrain Adv: '+defInfo.getTerrainAdvantage()+' => '+uinfo.attackDmgActionList.defVal+'</td>';
 	html += '</tr>';
 	html += '</tbody></table>';
 	
@@ -2325,18 +2789,19 @@ function popupTacticDmg(uid) {
 		html += 'ATK: '+uinfo.getStat('atk')+', '+toLocalize('연구')+': ATK +'+getResearchAtkBonus(uinfo.allowItemTypes[0]);
 	else
 		html += 'WIS: '+uinfo.getStat('wis');
-	html += '<br/>Terrain Adv: '+uinfo.getTerrainAdvantage()+'</td>';
+	html += '<br/>Terrain Adv: '+uinfo.getTerrainAdvantage()+' => '+uinfo.tacticDmgActionList.atkVal+'</td>';
 	html += '<td class="number">'+getDecimalText(uinfo.tacticDmgActionList.basicDmg)+'</td>';
 	html += '<td></td><td>';
 	if (uinfo.tactic.damageType === 'Fixed')
 		html += 'WIS: 0';
-	else if (defInfo.hasPassive(2200105)) // def stat switch
-		html += 'WIS: '+defInfo.getStat('wis')+', DEF: '+defInfo.getStat('def');
-	else if (uinfo.tactic.damageType === 'Physical')
+	else if (uinfo.tactic.damageType === 'Physical') {
 		html += 'DEF: '+defInfo.getStat('def');
+		if (defInfo.hasPassive(2200105)) // def stat switch
+			html += ', WIS: '+defInfo.getStat('wis');
+	}
 	else
 		html += 'WIS: '+defInfo.getStat('wis');
-	html += '<br/>Terrain Adv: '+defInfo.getTerrainAdvantage()+'</td>';
+	html += '<br/>Terrain Adv: '+defInfo.getTerrainAdvantage()+' => '+uinfo.tacticDmgActionList.defVal+'</td>';
 	html += '</tr>';
 	html += '</tbody></table>';
 	
@@ -2374,11 +2839,31 @@ function popupTacticDmg(uid) {
 	}
 }
 
+function applyCodeFromUrl() {
+	var url = window.location.href;
+	var parts = url.split('?');
+	if (parts.length === 1)
+		return; // no argument. do nothing
+	var paramTxt = parts[1];
+	var paramArr = paramTxt.split('&');
+	for (var i = 0; i < paramArr.length; i++) {
+		parts = paramArr[i].split('=');
+		if (parts[0] === "code") {
+			unserializeGameInfo(parts[1]);
+			replaceDisplayLanguage();
+			setUserUnitInfo(punits['p0']);
+			setUserUnitInfo(punits['p1']);
+		}
+	}
+}
 
 document.addEventListener('DOMContentLoaded', function() {
 	rtkWebCommonInit();
 	
 	setLangChangeCallback(replaceDisplayLanguage);
+	
+	for (var i = 0; i < units.length; i++)
+		unitsMap[units[i]['id']] = units[i];
 	
 	// When the user clicks anywhere outside of the slider div, close it
 	window.addEventListener("click", function(event) {
@@ -2415,14 +2900,14 @@ document.addEventListener('DOMContentLoaded', function() {
 		}
 	});
 	
-	setPassivePic('p0atkDouble', passives[2200023]);
-	setPassivePic('p0atkCritical', passives[2200061]);
-	setPassivePic('p1atkDouble', passives[2200023]);
-	setPassivePic('p1atkCritical', passives[2200061]);
-	setPassivePic('p0spellDouble', passives[2200024]);
-	setPassivePic('p0spellCritical', passives[2200061]);
-	setPassivePic('p1spellDouble', passives[2200024]);
-	setPassivePic('p1spellCritical', passives[2200061]);
+	setPassivePic('p0atkDouble', 2200023);
+	setPassivePic('p0atkCritical', 2200061);
+	setPassivePic('p1atkDouble', 2200023);
+	setPassivePic('p1atkCritical', 2200061);
+	setPassivePic('p0spellDouble', 2200024);
+	setPassivePic('p0spellCritical', 2200061);
+	setPassivePic('p1spellDouble', 2200024);
+	setPassivePic('p1spellCritical', 2200061);
 	
 	createGameModeSelection();
 	document.getElementById("content").style.marginTop = (document.getElementById("searchBar").offsetHeight+5) + "px";
@@ -2432,6 +2917,8 @@ document.addEventListener('DOMContentLoaded', function() {
 	setUnit(units[25], 'p1');
 	createTerrainSelection(punits['p0']);
 	createTerrainSelection(punits['p1']);
+	
+	applyCodeFromUrl();
 }, false);
 </script>
 </head>
@@ -2445,7 +2932,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		&nbsp; <button onclick="popupGameCode()">Code</button>
 	</div>
 	<div class="topbar-right" id="langSelection"></div>
-	<div class="topbar-right">65798 <button onclick="popupNote()">Note</button></div>
+	<div class="topbar-right">69333 <button onclick="popupNote()">Note</button></div>
 </div>
 
 <div id="advanceTool" style="padding-top: 5px">
@@ -2519,13 +3006,13 @@ document.addEventListener('DOMContentLoaded', function() {
   <span id="p0utp2" class="passive frame-red clickable" onclick="popupUnitTypePassive('p0',2)"></span>
 </div>
 
-<!-- relic group -->
+<!-- relic group and friendship -->
 <div>
 <span class="block" style="width:41px">
   <span id="p0relicSet" class="passive frame-red clickable" style="margin-top:18px;" onclick="popupSelectRelicSet('p0')"></span>
 </span>
 
-<span class="block">
+<span class="block" style="width:200px">
   <span id="p0r0" class="relic frame-red clickable" onclick="popupSelectRelic('p0', 0)"></span>
   <span id="p0r1" class="relic frame-red clickable" onclick="popupSelectRelic('p0', 1)"></span>
   <span id="p0r2" class="relic frame-red clickable" onclick="popupSelectRelic('p0', 2)"></span>
@@ -2543,6 +3030,10 @@ document.addEventListener('DOMContentLoaded', function() {
   <span id="p0rp3" class="passive frame-red clickable absInside" onclick="popupSelectRelicPassive('p0', 3)">
 	<span id="p0rp3lv" class="relicLvTxt">Lv5</span>
   </span>
+</span>
+
+<span class="block" style="width:41px">
+  <span id="p1relation" class="relationImg frame-red clickable" style="margin-top:18px;" onclick="popupSelectRelation('p0')"></span>
 </span>
 </div>
 
@@ -2597,6 +3088,8 @@ document.addEventListener('DOMContentLoaded', function() {
   <label for="p0agi" class="attrName">AGI: </label><span id="p0agi" class="statVal">50</span>
   <br/>
   <label for="p0mrl" class="attrName">MRL: </label><span id="p0mrl" class="statVal">50</span>
+  <br/><br/>
+  <button class="custom" onclick="popupCustomStat('p0')">Custom</button>
 </span>
 
 <span class="block">
@@ -2699,13 +3192,13 @@ document.addEventListener('DOMContentLoaded', function() {
   <span id="p1utp2" class="passive frame-red clickable" onclick="popupUnitTypePassive('p1',2)"></span>
 </div>
 
-<!-- relic group -->
+<!-- relic group and friendship -->
 <div>
 <span class="block" style="width:41px">
   <span id="p1relicSet" class="passive frame-red clickable" style="margin-top:18px;" onclick="popupSelectRelicSet('p1')"></span>
 </span>
 
-<span class="block">
+<span class="block" style="width:200px">
   <span id="p1r0" class="relic frame-red clickable" onclick="popupSelectRelic('p1', 0)"></span>
   <span id="p1r1" class="relic frame-red clickable" onclick="popupSelectRelic('p1', 1)"></span>
   <span id="p1r2" class="relic frame-red clickable" onclick="popupSelectRelic('p1', 2)"></span>
@@ -2723,6 +3216,10 @@ document.addEventListener('DOMContentLoaded', function() {
   <span id="p1rp3" class="passive frame-red clickable absInside" onclick="popupSelectRelicPassive('p1', 3)">
 	<span id="p1rp3lv" class="relicLvTxt">Lv5</span>
   </span>
+</span>
+
+<span class="block" style="width:41px">
+  <span id="p1relation" class="relationImg frame-red clickable" style="margin-top:18px;" onclick="popupSelectRelation('p1')"></span>
 </span>
 </div>
 
@@ -2777,6 +3274,8 @@ document.addEventListener('DOMContentLoaded', function() {
   <label for="p1agi" class="attrName">AGI: </label><span id="p1agi" class="statVal">50</span>
   <br/>
   <label for="p1mrl" class="attrName">MRL: </label><span id="p1mrl" class="statVal">50</span>
+  <br/><br/>
+  <button class="custom" onclick="popupCustomStat('p1')">Custom</button>
 </span>
 
 <span class="block">

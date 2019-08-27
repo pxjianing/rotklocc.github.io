@@ -132,53 +132,69 @@ function toLocalize2(tkey) {
 	return toLocalizeLang(tkey, selLang2);
 }
 
-function toLocalizes(tkey, sep="<br/>") {
+function toLocalizes(tkey, sep="<br/>", biLang=true) {
 	var txt = toLocalizeLang(tkey, selLang);
-	if (selLang2 !== -1) {
+	if (biLang && selLang2 !== -1) {
 		txt += sep;
 		txt += toLocalizeLang(tkey, selLang2);
 	}
 	return txt;
 }
 
-function localizePassiveName(passiveId, val, sep="<br/>") {
+function localizePassiveName(passiveId, val, sep="<br/>", biLang=true, showVal=true) {
 	var passive = passives[passiveId];
-	txt = toLocalize(passive['name']);
+	var txt = toLocalize(passive['name']);
 	// list of passive that should have value
 	// 2200062: Critical Attack+
 	// 2200005: Expand AoE
 	// 2200002: Expand ATK RNG
-	value_pids = [2200062, 2200005, 2200002];
-	if (val !== -1 && (passive["desc"].indexOf("{0}") !== -1 || value_pids.indexOf(passiveId) !== -1)) {
-		txt += " (" + val + ")";
+	if (showVal) {
+		value_pids = [2200062, 2200005, 2200002];
+		if (val !== -1 && (passive["desc"].indexOf("{0}") !== -1 || value_pids.indexOf(passiveId) !== -1)) {
+			txt += " (" + val + ")";
+		}
 	}
 	
-	if (selLang2 !== -1) {
+	if (biLang && selLang2 !== -1) {
 		txt += sep;
 		txt += toLocalizeLang(passive['name'], selLang2);
 	}
 	return txt
 }
 
-function getPassiveDescSimple(passive, passiveVal, langId) {
-	var desc = toLocalizeLang(passive['desc'], langId);
+function getPassiveDescSimple(passiveId, passiveVal, langId) {
+	var desc;
+	if (passiveId == 2200005) // Expand AoE
+		desc = toLocalizeLang(atkDmgShapes[passiveVal]['desc'], langId);
+	else if (passiveId == 2200002) // Expand ATK RNG
+		desc = toLocalizeLang(atkRngShapes[passiveVal]['desc'], langId);
+	else
+		desc = toLocalizeLang(passives[passiveId]['desc'], langId);
+	
 	while (desc.indexOf('{0}') !== -1) {
 		desc = desc.replace('{0}', passiveVal);
 	}
 	return desc;
 }
 
-function localizePassiveDescSimple(passive, passiveVal, sep="<br/>") {
-	var txt = getPassiveDescSimple(passive, passiveVal, selLang);
+function localizePassiveDescSimple(passiveId, passiveVal, sep="<br/>") {
+	var txt = getPassiveDescSimple(passiveId, passiveVal, selLang);
 	if (selLang2 !== -1) {
-		txt += sep + getPassiveDescSimple(passive, passiveVal, selLang2);
+		txt += sep + getPassiveDescSimple(passiveId, passiveVal, selLang2);
 	}
 	return txt;
 }
 
 function getPassiveDesc(passiveList, langId) {
-	var passive = passives[passiveList['passiveId']];
-	var desc = toLocalizeLang(passive['desc'], langId);
+	var passiveId = passiveList['passiveId'];
+	var passive = passives[passiveId];
+	var desc;
+	if (passiveId == 2200005) // Expand AoE
+		desc = toLocalizeLang(atkDmgShapes[passiveList['val']]['desc'], langId);
+	else if (passiveId == 2200002) // Expand ATK RNG
+		desc = toLocalizeLang(atkRngShapes[passiveList['val']]['desc'], langId);
+	else
+		desc = toLocalizeLang(passive['desc'], langId);
 	
 	while (desc.indexOf('{0}') !== -1) {
 		desc = desc.replace('{0}', passiveList['val']);
@@ -216,7 +232,7 @@ function localizePassiveListDesc(passiveList, sep="<br/>") {
 function getHtmlPassiveDesc(passiveId, passiveVal) {
 	var passive = passives[passiveId];
 	var txt = "<b>Stack:</b> " + (passive["accumulate"] == 0 ? "No" : "Yes") + "<br/>";
-	txt += "<b>Description:</b><br/>" + localizePassiveDescSimple(passive, passiveVal);
+	txt += "<b>Description:</b><br/>" + localizePassiveDescSimple(passiveId, passiveVal);
 	
 	if (passiveId == 2200005) {  // Expand AoE
 		txt += '<p>' + getShapeHtml(passiveVal, false) + '</p>';
@@ -243,6 +259,7 @@ function getHtmlPassiveListDesc(passiveList, hasStackInfo=true) {
 	
 	if (passiveId == 2200005) {  // Expand AoE
 		txt += '<p>' + getShapeHtml(passiveList["val"], false) + '</p>';
+		//txt += '<p>' + getPassiveIconHtml(atkDmgShapes[passiveList['val']]['icon']) + '</p>';
 	}
 	else if (passiveId == 2200002) {  // Expand ATK RNG
 		txt += '<p>' + getShapeHtml(passiveList["val"], true) + '</p>';
@@ -371,6 +388,8 @@ function createSideBarMenu() {
 	html += '<a href="tactics.html">Tactics</a>';
 	html += '<a href="terrains.html">Terrains</a>';
 	html += '<br/>';
+	html += '<a href="simulator.html">Calculator</a>';
+	html += '<br/>';
 	html += '<a href="artifacts.html">Artifacts</a>';
 	html += '<a href="artifactUpgradeStats.html">Artifacts Upgrade</a>';
 	html += '<a href="artifactUpgradePassives.html">Artifact Passives</a>';
@@ -380,9 +399,11 @@ function createSideBarMenu() {
 	html += '<a href="relicSets.html">Relic Sets</a>';
 	html += '<br/>';
 	html += '<a href="stories.html">Stories</a>';
+	html += '<a href="friendships.html">Friendships</a>';
 	html += '<br/>';
 	html += '<a href="feats.html">Feats</a>';
 	html += '<a href="guildMissions.html">Guild Missions</a>';
+	html += '<a href="shop.html">Shop</a>';
 	
 	ele.innerHTML = html;
 	body.appendChild(ele);
@@ -410,11 +431,34 @@ function getConditionIconHtml(iconName, extraClass="") {
 	return _iconHtml('condition', conditionIcons[iconName], extraClass);
 }
 
-function getPassiveIconHtml(iconName, extraClass="") {
+function getPassiveIconName(passiveId, passiveVal) {
+	if (passiveId == 2200005) {  // Expand AoE
+		return atkDmgShapes[passiveVal]['icon'];
+	}
+	else if (passiveId == 2200002) {  // Expand ATK RNG
+		return atkRngShapes[passiveVal]['icon'];
+	}
+	return passives[passiveId]['icon'];
+}
+
+function getPassiveListIconName(passiveList) {
+	return getPassiveIconName(passiveList['passiveId'], passiveList['val']);
+}
+
+function getPassiveIconNameHtml(iconName, extraClass="") {
 	var icon = passiveIcons[iconName];
 	if (!icon)  // some passive icon is in magic
 		return getMagicIconHtml(iconName, extraClass)
 	return _iconHtml('passive', icon, extraClass);
+}
+
+function getPassiveIconHtml(passiveId, passiveVal, extraClass="") {
+	var iconName = getPassiveIconName(passiveId, passiveVal);
+	return getPassiveIconNameHtml(iconName, extraClass);
+}
+
+function getPassiveListIconHtml(passiveList, extraClass="") {
+	return getPassiveIconHtml(passiveList['passiveId'], passiveList['val'], extraClass);
 }
 
 function getPassiveIconInfo(iconName) {
@@ -440,4 +484,27 @@ function getRelicIconHtml(iconName, extraClass="") {
 
 function isTypeHeavyCavalry(typeId) {
 	return ([1210001, 1210007, 1210009, 1210017, 1210069, 1210070, 1210078].indexOf(typeId) !== -1);
+}
+
+function getRelationTriggerText(triggerType, unitCount, biLang=true) {
+	var html;
+	if (triggerType === 0) {
+		if (unitCount === 0)
+			html = toLocalizes('모두 출진 시 발동', '<br/>', biLang);
+		else
+			html = toLocalizes('{0}명 이상 출진 시 발동', '<br/>', biLang).format(unitCount);
+	}
+	else if (triggerType === 1) {
+		if (unitCount === 0)
+			html = toLocalizes('퇴각 시 발동', '<br/>', biLang);
+		else
+			html = toLocalizes('{0}명 이상 퇴각 시 발동', '<br/>', biLang).format(unitCount);
+	}
+	else if (triggerType === 2) {
+		if (unitCount === 0)
+			html = toLocalizes('인접 시 발동', '<br/>', biLang);
+		else
+			html = toLocalizes('{0}명 이상 인접 시 발동', '<br/>', biLang).format(unitCount);
+	}
+	return html;
 }
